@@ -82,10 +82,10 @@ h3{color:#e94560;font-size:13px;margin-bottom:8px;border-bottom:1px solid #333;p
 .modal .btn-cancel{background:#333;border-color:#555}
 
 /* CONTEXT MENU */
-#ctx-menu{display:none;position:fixed;background:#16213e;border:1px solid #e94560;border-radius:4px;z-index:2000;min-width:160px;box-shadow:0 4px 12px rgba(0,0,0,.5)}
+#ctx-menu{display:none;position:fixed;background:#16213e;border:1px solid #e94560;border-radius:6px;z-index:2000;min-width:170px;box-shadow:0 4px 20px rgba(0,0,0,.6)}
 #ctx-menu.show{display:block}
-#ctx-menu .ctx-item{padding:8px 14px;cursor:pointer;font-size:12px}
-#ctx-menu .ctx-item:hover{background:#e94560}
+#ctx-menu .ctx-item{padding:13px 18px;cursor:pointer;font-size:14px}
+#ctx-menu .ctx-item:hover,#ctx-menu .ctx-item:active{background:#e94560}
 #ctx-menu .ctx-sep{height:1px;background:#333;margin:2px 0}
 
 /* 3D VIEW */
@@ -101,6 +101,62 @@ h3{color:#e94560;font-size:13px;margin-bottom:8px;border-bottom:1px solid #333;p
 
 /* TOOLTIP */
 .tooltip{position:fixed;background:#0f3460;border:1px solid #e94560;padding:4px 8px;border-radius:3px;font-size:11px;pointer-events:none;z-index:3000;display:none}
+
+/* ======= MOBILE RESPONSIVE ======= */
+/* Bottom navigation bar (mobile only) */
+#mobile-nav{display:none;position:fixed;bottom:0;left:0;right:0;background:#16213e;border-top:2px solid #e94560;z-index:400;flex-direction:row;height:56px}
+#mobile-nav button{flex:1;border:none;border-right:1px solid #333;background:transparent;color:#aaa;font-size:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:0;cursor:pointer;transition:color .2s,background .2s}
+#mobile-nav button:last-child{border-right:none}
+#mobile-nav button.active,#mobile-nav button:active{color:#e94560;background:rgba(233,69,96,0.1)}
+#mobile-nav .nav-icon{font-size:20px;line-height:1}
+#mobile-nav .nav-label{font-size:9px}
+
+/* Mobile slide panels */
+#left-panel,#right-panel{transition:transform .25s cubic-bezier(.4,0,.2,1)}
+
+/* Mobile floating action bar */
+#mobile-action-bar{display:none;position:fixed;bottom:60px;left:50%;transform:translateX(-50%);background:#16213e;border:1px solid #e94560;border-radius:24px;padding:6px 12px;gap:8px;z-index:390;box-shadow:0 4px 16px rgba(0,0,0,.5)}
+#mobile-action-bar button{background:#0f3460;border:none;color:#e0e0e0;border-radius:20px;padding:8px 14px;font-size:13px;cursor:pointer;white-space:nowrap}
+#mobile-action-bar button.active{background:#e94560}
+
+/* Pinch zoom indicator */
+#pinch-indicator{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(22,33,62,.85);border:1px solid #e94560;border-radius:8px;padding:8px 16px;font-size:13px;color:#e94560;z-index:999;pointer-events:none}
+
+@media (max-width:768px){
+  #toolbar{overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;padding:4px 8px;gap:6px}
+  #toolbar .tb-group{flex-shrink:0}
+  #main{position:relative}
+  #left-panel{
+    position:fixed;left:0;top:0;bottom:56px;z-index:300;
+    transform:translateX(-100%);
+    box-shadow:4px 0 24px rgba(0,0,0,.5);
+    width:240px;
+  }
+  #left-panel.open{transform:translateX(0)}
+  #right-panel{
+    position:fixed;right:0;top:0;bottom:56px;z-index:300;
+    transform:translateX(100%);
+    box-shadow:-4px 0 24px rgba(0,0,0,.5);
+    width:260px;
+  }
+  #right-panel.open{transform:translateX(0)}
+  #center{width:100%}
+  #statusbar{font-size:10px;gap:8px;padding:2px 6px;overflow:hidden}
+  #mobile-nav{display:flex}
+  #mobile-action-bar{display:flex}
+  button{padding:7px 10px;font-size:13px}
+  .part-item{padding:10px 8px}
+  .obstacle-item{padding:9px 8px}
+  #canvas{touch-action:none}
+  /* Larger touch targets for modal buttons */
+  .modal .btn-row button{padding:10px 20px;font-size:14px}
+  /* Panel backdrop */
+  #panel-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:299}
+  #panel-backdrop.show{display:block}
+}
+@media (min-width:769px){
+  #panel-backdrop{display:none!important}
+}
 </style>
 </head>
 <body>
@@ -218,6 +274,45 @@ h3{color:#e94560;font-size:13px;margin-bottom:8px;border-bottom:1px solid #333;p
   <span>スケール: <span id="sb-scale">1:40</span></span>
   <span>アイテム数: <span id="sb-items">0</span></span>
   <span id="sb-warning" class="warn"></span>
+</div>
+
+<!-- PANEL BACKDROP (mobile) -->
+<div id="panel-backdrop" onclick="closePanels()"></div>
+
+<!-- PINCH INDICATOR -->
+<div id="pinch-indicator">🔍 <span id="pinch-scale">100%</span></div>
+
+<!-- MOBILE ACTION BAR -->
+<div id="mobile-action-bar">
+  <button id="mob-tool-select" class="active" onclick="setTool('select');updateMobileToolBtns()">選択</button>
+  <button id="mob-tool-pan" onclick="setTool('pan');updateMobileToolBtns()">移動</button>
+  <button onclick="rotateSelected()">回転 ↻</button>
+  <button onclick="deleteSelected()" style="color:#e74c3c">削除</button>
+  <button onclick="duplicateSelected()">複製</button>
+</div>
+
+<!-- MOBILE BOTTOM NAV -->
+<div id="mobile-nav">
+  <button onclick="toggleMobilePanel('left')">
+    <span class="nav-icon">📦</span>
+    <span class="nav-label">部材</span>
+  </button>
+  <button onclick="openAutoPlace()">
+    <span class="nav-icon">⚡</span>
+    <span class="nav-label">自動配置</span>
+  </button>
+  <button onclick="fitView();renderAll()">
+    <span class="nav-icon">🏠</span>
+    <span class="nav-label">全体表示</span>
+  </button>
+  <button onclick="open3DView()">
+    <span class="nav-icon">🧊</span>
+    <span class="nav-label">3D</span>
+  </button>
+  <button onclick="toggleMobilePanel('right')">
+    <span class="nav-icon">📊</span>
+    <span class="nav-label">情報</span>
+  </button>
 </div>
 
 <!-- CONTEXT MENU -->
@@ -1045,10 +1140,204 @@ function onContextMenu(e) {
     renderAll();
     updateRightPanel();
   }
+  showContextMenu(e.clientX, e.clientY);
+}
+
+function showContextMenu(cx, cy) {
   const menu = document.getElementById('ctx-menu');
-  menu.style.left = e.clientX + 'px';
-  menu.style.top = e.clientY + 'px';
+  // Keep menu within viewport
+  const vw = window.innerWidth, vh = window.innerHeight;
+  let x = cx, y = cy;
+  if (x + 170 > vw) x = vw - 174;
+  if (y + 200 > vh) y = vh - 204;
+  menu.style.left = x + 'px';
+  menu.style.top  = y + 'px';
   menu.classList.add('show');
+}
+
+// ===================== TOUCH EVENTS =====================
+let touch = {
+  lastTouches: [],
+  pinchDist: null,
+  longPressTimer: null,
+  startX: 0, startY: 0,
+  moved: false,
+};
+
+function getTouchPos(t) {
+  const rect = canvas.getBoundingClientRect();
+  return { x: t.clientX - rect.left, y: t.clientY - rect.top };
+}
+
+function touchDist(t1, t2) {
+  const dx = t1.clientX - t2.clientX;
+  const dy = t1.clientY - t2.clientY;
+  return Math.sqrt(dx*dx + dy*dy);
+}
+
+function touchMidpoint(t1, t2) {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: (t1.clientX + t2.clientX) / 2 - rect.left,
+    y: (t1.clientY + t2.clientY) / 2 - rect.top,
+  };
+}
+
+canvas.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  touch.moved = false;
+  clearTimeout(touch.longPressTimer);
+
+  if (e.touches.length === 1) {
+    const t = e.touches[0];
+    const pos = getTouchPos(t);
+    touch.startX = t.clientX;
+    touch.startY = t.clientY;
+
+    // Long-press → context menu (500ms)
+    touch.longPressTimer = setTimeout(() => {
+      if (!touch.moved) {
+        const mm = screenToMm(pos.x, pos.y);
+        APP.ctxTarget = hitTestItems(mm.x, mm.y);
+        if (APP.ctxTarget) {
+          APP.selected = APP.ctxTarget;
+          renderAll(); updateRightPanel();
+        }
+        // Vibrate if supported
+        if (navigator.vibrate) navigator.vibrate(40);
+        showContextMenu(t.clientX, t.clientY);
+      }
+    }, 500);
+
+    // Simulate mousedown
+    const synth = new MouseEvent('mousedown', {
+      clientX: t.clientX, clientY: t.clientY, button: 0, bubbles: true
+    });
+    onMouseDown(synth);
+
+  } else if (e.touches.length === 2) {
+    // Start pinch
+    clearTimeout(touch.longPressTimer);
+    APP.isPanning = false;
+    APP.dragging = null;
+    touch.pinchDist = touchDist(e.touches[0], e.touches[1]);
+    touch.pinchScale = APP.scale;
+    const mid = touchMidpoint(e.touches[0], e.touches[1]);
+    touch.pinchMidMm = screenToMm(mid.x, mid.y);
+    touch.pinchMid = mid;
+    document.getElementById('pinch-indicator').style.display = 'block';
+  }
+
+  touch.lastTouches = Array.from(e.touches);
+}, { passive: false });
+
+canvas.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  touch.moved = true;
+  clearTimeout(touch.longPressTimer);
+
+  if (e.touches.length === 1) {
+    const t = e.touches[0];
+    const pos = getTouchPos(t);
+    const mm = screenToMm(pos.x, pos.y);
+
+    // Update cursor display
+    document.getElementById('sb-cursor').textContent =
+      `X: ${Math.round(mm.x)}mm, Y: ${Math.round(mm.y)}mm`;
+
+    if (APP.dragging) {
+      const dx = mm.x - APP.dragStartMm.x;
+      const dy = mm.y - APP.dragStartMm.y;
+      let nx = APP.dragItemOrigin.x + dx;
+      let ny = APP.dragItemOrigin.y + dy;
+      nx = snapMm(nx, false);
+      ny = snapMm(ny, false);
+      nx = Math.max(0, Math.min(nx, APP.warehouse.width - APP.dragging.width));
+      ny = Math.max(0, Math.min(ny, APP.warehouse.depth - APP.dragging.depth));
+      APP.dragging.x = nx;
+      APP.dragging.y = ny;
+      renderAll(); updateRightPanel();
+    } else if (APP.isPanning) {
+      const dx = pos.x - APP.panStart.x;
+      const dy = pos.y - APP.panStart.y;
+      APP.offset.x = APP.offsetAtPanStart.x + dx;
+      APP.offset.y = APP.offsetAtPanStart.y + dy;
+      renderAll();
+    } else if (APP.tool === 'place' && APP.placingType) {
+      renderAll();
+      drawPlacingGhost(mm, false);
+    }
+
+  } else if (e.touches.length === 2) {
+    // Pinch zoom
+    const dist = touchDist(e.touches[0], e.touches[1]);
+    const ratio = dist / touch.pinchDist;
+    const newScale = Math.max(0.005, Math.min(0.2, touch.pinchScale * ratio));
+
+    const mid = touchMidpoint(e.touches[0], e.touches[1]);
+    APP.scale = newScale;
+    APP.offset.x = mid.x - touch.pinchMidMm.x * newScale;
+    APP.offset.y = mid.y - touch.pinchMidMm.y * newScale;
+
+    const pct = Math.round(newScale / 0.025 * 100);
+    document.getElementById('pinch-scale').textContent = pct + '%';
+    updateStatusBarScale();
+    renderAll();
+  }
+
+  touch.lastTouches = Array.from(e.touches);
+}, { passive: false });
+
+canvas.addEventListener('touchend', (e) => {
+  e.preventDefault();
+  clearTimeout(touch.longPressTimer);
+  document.getElementById('pinch-indicator').style.display = 'none';
+
+  if (!touch.moved && e.changedTouches.length === 1) {
+    // Tap → place item
+    if (APP.tool === 'place' && APP.placingType) {
+      const t = e.changedTouches[0];
+      const pos = getTouchPos(t);
+      const mm = screenToMm(pos.x, pos.y);
+      placeItem(mm, false);
+    }
+  }
+
+  // Simulate mouseup
+  onMouseUp({ clientX: 0, clientY: 0 });
+
+  touch.pinchDist = null;
+  touch.lastTouches = Array.from(e.touches);
+}, { passive: false });
+
+// ===================== MOBILE UI HELPERS =====================
+function toggleMobilePanel(side) {
+  const panel = document.getElementById(side + '-panel');
+  const backdrop = document.getElementById('panel-backdrop');
+  const isOpen = panel.classList.contains('open');
+
+  // Close any open panel first
+  document.getElementById('left-panel').classList.remove('open');
+  document.getElementById('right-panel').classList.remove('open');
+
+  if (!isOpen) {
+    panel.classList.add('open');
+    backdrop.classList.add('show');
+  } else {
+    backdrop.classList.remove('show');
+  }
+}
+
+function closePanels() {
+  document.getElementById('left-panel').classList.remove('open');
+  document.getElementById('right-panel').classList.remove('open');
+  document.getElementById('panel-backdrop').classList.remove('show');
+}
+
+function updateMobileToolBtns() {
+  document.querySelectorAll('#mobile-action-bar button[id^="mob-tool-"]').forEach(b => b.classList.remove('active'));
+  const active = document.getElementById('mob-tool-' + APP.tool);
+  if (active) active.classList.add('active');
 }
 
 function onDblClick(e) {
@@ -1239,6 +1528,10 @@ function setTool(tool) {
     APP.placingType = null;
     if (lastHighlightedPart) { lastHighlightedPart.style.borderColor = ''; lastHighlightedPart = null; }
   }
+  // Sync mobile buttons
+  document.querySelectorAll('#mobile-action-bar button[id^="mob-tool-"]').forEach(b => b.classList.remove('active'));
+  const mobBtn = document.getElementById('mob-tool-' + tool);
+  if (mobBtn) mobBtn.classList.add('active');
 }
 
 function rotateSelected() {
