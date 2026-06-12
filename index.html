@@ -1,0 +1,1812 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>倉庫レイアウトプランナー</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#1a1a2e;color:#e0e0e0;font-family:'Segoe UI',sans-serif;font-size:13px;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+button{background:#0f3460;color:#e0e0e0;border:1px solid #e94560;border-radius:4px;padding:5px 10px;cursor:pointer;font-size:12px;transition:background .2s}
+button:hover{background:#e94560}
+button.active{background:#e94560}
+input,select{background:#0f3460;color:#e0e0e0;border:1px solid #444;border-radius:4px;padding:4px 6px;font-size:12px}
+input:focus,select:focus{outline:none;border-color:#e94560}
+label{color:#aaa;font-size:12px}
+h3{color:#e94560;font-size:13px;margin-bottom:8px;border-bottom:1px solid #333;padding-bottom:4px}
+
+/* TOOLBAR */
+#toolbar{background:#16213e;border-bottom:2px solid #e94560;padding:6px 10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex-shrink:0}
+#toolbar .tb-group{display:flex;align-items:center;gap:4px;padding:0 6px;border-right:1px solid #333}
+#toolbar .tb-group:last-child{border-right:none}
+#toolbar span.lbl{color:#888;font-size:11px;margin-right:2px}
+
+/* MAIN */
+#main{display:flex;flex:1;overflow:hidden}
+
+/* LEFT PANEL */
+#left-panel{width:220px;background:#16213e;border-right:2px solid #333;display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0}
+#left-panel .section{padding:10px;border-bottom:1px solid #333}
+.part-item{background:#0f3460;border:1px solid #333;border-radius:4px;padding:6px 8px;margin-bottom:6px;cursor:grab;display:flex;align-items:center;gap:6px;transition:border-color .2s}
+.part-item:hover{border-color:#e94560}
+.part-item .color-dot{width:12px;height:12px;border-radius:2px;flex-shrink:0}
+.part-item .part-info{flex:1}
+.part-item .part-name{font-size:12px;font-weight:bold}
+.part-item .part-dim{font-size:10px;color:#888}
+.obstacle-item{background:#1a1a2e;border:1px solid #333;border-radius:4px;padding:5px 8px;margin-bottom:5px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:border-color .2s}
+.obstacle-item:hover{border-color:#f39c12}
+
+/* CENTER */
+#center{flex:1;position:relative;overflow:hidden;background:#0a0a1a}
+#canvas{display:block;cursor:crosshair}
+#canvas.tool-select{cursor:default}
+#canvas.tool-pan{cursor:grab}
+#canvas.tool-pan.panning{cursor:grabbing}
+
+/* RIGHT PANEL */
+#right-panel{width:260px;background:#16213e;border-left:2px solid #333;display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0}
+#right-panel .section{padding:10px;border-bottom:1px solid #333}
+.stat-row{display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #222}
+.stat-val{color:#e94560;font-weight:bold}
+.validation-item{padding:4px 6px;margin-bottom:4px;border-radius:3px;font-size:11px}
+.validation-item.error{background:#3d1515;border-left:3px solid #e74c3c}
+.validation-item.warning{background:#3d2d10;border-left:3px solid #f39c12}
+.validation-item.ok{background:#1a3d1a;border-left:3px solid #27ae60}
+.rack-list-item{background:#0f3460;border-radius:3px;padding:4px 8px;margin-bottom:3px;font-size:11px;display:flex;justify-content:space-between;cursor:pointer}
+.rack-list-item:hover{background:#e94560}
+.rack-list-item.selected{background:#e94560}
+
+/* PROPS */
+.prop-row{display:flex;align-items:center;margin-bottom:6px;gap:6px}
+.prop-row label{width:60px;flex-shrink:0;color:#aaa}
+.prop-row input,.prop-row select{flex:1;min-width:0}
+
+/* STATUS BAR */
+#statusbar{background:#16213e;border-top:1px solid #333;padding:3px 12px;display:flex;gap:20px;align-items:center;font-size:11px;color:#888;flex-shrink:0}
+#statusbar span{color:#aaa}
+#statusbar .warn{color:#f39c12}
+
+/* MODAL */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center}
+.modal-overlay.show{display:flex}
+.modal{background:#16213e;border:1px solid #e94560;border-radius:8px;padding:20px;min-width:380px;max-width:600px;max-height:80vh;overflow-y:auto}
+.modal h2{color:#e94560;margin-bottom:16px;font-size:16px}
+.modal .form-row{display:flex;align-items:center;margin-bottom:10px;gap:8px}
+.modal .form-row label{width:140px;flex-shrink:0}
+.modal .form-row input,.modal .form-row select{flex:1}
+.modal .btn-row{display:flex;gap:8px;margin-top:16px;justify-content:flex-end}
+.modal .btn-row button{min-width:80px}
+.modal .btn-cancel{background:#333;border-color:#555}
+
+/* CONTEXT MENU */
+#ctx-menu{display:none;position:fixed;background:#16213e;border:1px solid #e94560;border-radius:4px;z-index:2000;min-width:160px;box-shadow:0 4px 12px rgba(0,0,0,.5)}
+#ctx-menu.show{display:block}
+#ctx-menu .ctx-item{padding:8px 14px;cursor:pointer;font-size:12px}
+#ctx-menu .ctx-item:hover{background:#e94560}
+#ctx-menu .ctx-sep{height:1px;background:#333;margin:2px 0}
+
+/* 3D VIEW */
+#view3d-overlay{display:none;position:fixed;inset:0;background:#0a0a1a;z-index:500}
+#view3d-overlay.show{display:flex;flex-direction:column}
+#view3d-toolbar{background:#16213e;border-bottom:1px solid #e94560;padding:8px 12px;display:flex;gap:8px;align-items:center}
+#view3d-canvas{flex:1}
+
+/* SCROLLBAR */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:#0f3460}
+::-webkit-scrollbar-thumb{background:#e94560;border-radius:3px}
+
+/* TOOLTIP */
+.tooltip{position:fixed;background:#0f3460;border:1px solid #e94560;padding:4px 8px;border-radius:3px;font-size:11px;pointer-events:none;z-index:3000;display:none}
+</style>
+</head>
+<body>
+
+<!-- TOOLBAR -->
+<div id="toolbar">
+  <div class="tb-group">
+    <span class="lbl">倉庫:</span>
+    <button onclick="openWarehouseModal()">設定</button>
+    <span id="tb-wh-name" style="color:#e94560;font-weight:bold">倉庫1</span>
+  </div>
+  <div class="tb-group">
+    <span class="lbl">ツール:</span>
+    <button id="tool-select" class="active" onclick="setTool('select')" title="選択 (S)">選択</button>
+    <button id="tool-pan" onclick="setTool('pan')" title="パン (P)">移動</button>
+    <button id="tool-place" onclick="setTool('place')" title="配置">配置</button>
+  </div>
+  <div class="tb-group">
+    <button onclick="rotateSelected()" title="回転 (R)">回転 R</button>
+    <button onclick="deleteSelected()" title="削除 (Del)" style="border-color:#e74c3c">削除</button>
+    <button onclick="duplicateSelected()" title="複製 (Ctrl+D)">複製</button>
+  </div>
+  <div class="tb-group">
+    <button onclick="undoAction()" title="元に戻す (Ctrl+Z)">↩ 元に戻す</button>
+    <button onclick="redoAction()" title="やり直し (Ctrl+Y)">↪ やり直し</button>
+  </div>
+  <div class="tb-group">
+    <button onclick="openAutoPlace()" style="border-color:#27ae60">自動配置</button>
+  </div>
+  <div class="tb-group">
+    <span class="lbl">表示:</span>
+    <button id="btn-grid" class="active" onclick="toggleGrid()">グリッド</button>
+    <button id="btn-dim" class="active" onclick="toggleDimensions()">寸法</button>
+    <button id="btn-heat" onclick="toggleHeatmap()">ヒートマップ</button>
+    <button id="btn-valid" class="active" onclick="toggleValidation()">検証</button>
+  </div>
+  <div class="tb-group">
+    <button onclick="open3DView()" style="border-color:#8e44ad">3D表示</button>
+  </div>
+  <div class="tb-group">
+    <span class="lbl">エクスポート:</span>
+    <button onclick="exportPNG()">PNG</button>
+    <button onclick="exportPDF()">PDF</button>
+    <button onclick="exportExcel()">Excel</button>
+  </div>
+  <div class="tb-group">
+    <button onclick="saveLayout()" style="border-color:#27ae60">保存</button>
+    <button onclick="loadLayout()" style="border-color:#27ae60">読込</button>
+    <button onclick="clearAll()" style="border-color:#e74c3c">クリア</button>
+  </div>
+  <div class="tb-group">
+    <span class="lbl">ズーム:</span>
+    <button onclick="zoomIn()">+</button>
+    <button onclick="zoomOut()">-</button>
+    <button onclick="fitView()">全体</button>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div id="main">
+
+  <!-- LEFT PANEL -->
+  <div id="left-panel">
+    <div class="section">
+      <h3>ラックパーツ</h3>
+      <div id="parts-library"></div>
+    </div>
+    <div class="section">
+      <h3>障害物</h3>
+      <div id="obstacles-library"></div>
+    </div>
+    <div class="section">
+      <h3>フォークリフト</h3>
+      <label>タイプ:</label>
+      <select onchange="APP.forkliftType=this.value;renderAll()" style="width:100%;margin-top:4px">
+        <option value="reach">リーチ (2700mm通路)</option>
+        <option value="counter">カウンター (3500mm通路)</option>
+        <option value="hand">ハンドリフト (1800mm通路)</option>
+      </select>
+      <div style="margin-top:8px;font-size:11px;color:#888">
+        <div id="forklift-info">最小通路幅: 2700mm</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CENTER CANVAS -->
+  <div id="center">
+    <canvas id="canvas"></canvas>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div id="right-panel">
+    <div class="section" id="stats-section">
+      <h3>統計情報</h3>
+      <div id="stats-content"></div>
+    </div>
+    <div class="section" id="props-section" style="display:none">
+      <h3>プロパティ</h3>
+      <div id="props-content"></div>
+    </div>
+    <div class="section" id="validation-section">
+      <h3>検証結果</h3>
+      <div id="validation-content"></div>
+    </div>
+    <div class="section">
+      <h3>配置リスト</h3>
+      <div id="rack-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- STATUS BAR -->
+<div id="statusbar">
+  <span>カーソル: <span id="sb-cursor">--</span></span>
+  <span>スケール: <span id="sb-scale">1:40</span></span>
+  <span>アイテム数: <span id="sb-items">0</span></span>
+  <span id="sb-warning" class="warn"></span>
+</div>
+
+<!-- CONTEXT MENU -->
+<div id="ctx-menu">
+  <div class="ctx-item" onclick="ctxAction('select')">選択</div>
+  <div class="ctx-item" onclick="ctxAction('rotate')">回転 (90°)</div>
+  <div class="ctx-item" onclick="ctxAction('duplicate')">複製</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" onclick="ctxAction('props')">プロパティ</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" onclick="ctxAction('delete')" style="color:#e74c3c">削除</div>
+</div>
+
+<!-- TOOLTIP -->
+<div class="tooltip" id="tooltip"></div>
+
+<!-- WAREHOUSE MODAL -->
+<div class="modal-overlay" id="modal-warehouse">
+  <div class="modal">
+    <h2>倉庫設定</h2>
+    <div class="form-row"><label>倉庫名</label><input id="wh-name" value="倉庫1"></div>
+    <div class="form-row"><label>幅 (mm)</label><input id="wh-width" type="number" value="30000"></div>
+    <div class="form-row"><label>奥行き (mm)</label><input id="wh-depth" type="number" value="20000"></div>
+    <div class="form-row"><label>天井高さ (mm)</label><input id="wh-height" type="number" value="6000"></div>
+    <div class="btn-row">
+      <button class="btn-cancel" onclick="closeModal('modal-warehouse')">キャンセル</button>
+      <button onclick="applyWarehouseSettings()">適用</button>
+    </div>
+  </div>
+</div>
+
+<!-- AUTO PLACE MODAL -->
+<div class="modal-overlay" id="modal-autoplace">
+  <div class="modal">
+    <h2>自動配置</h2>
+    <div class="form-row"><label>ラックタイプ</label>
+      <select id="ap-type">
+        <option value="nesting">ネスティングラック</option>
+        <option value="pallet">パレットラック</option>
+        <option value="shelf">軽量棚</option>
+      </select>
+    </div>
+    <div class="form-row"><label>通路幅 (mm)</label><input id="ap-aisle" type="number" value="2700"></div>
+    <div class="form-row"><label>壁クリアランス (mm)</label><input id="ap-wall" type="number" value="500"></div>
+    <div class="form-row"><label>方向</label>
+      <select id="ap-dir">
+        <option value="h">横方向</option>
+        <option value="v">縦方向</option>
+      </select>
+    </div>
+    <div class="form-row"><label>既存をクリア</label><input id="ap-clear" type="checkbox"></div>
+    <div class="form-row" style="background:#1a1a2e;padding:8px;border-radius:4px">
+      <div id="ap-preview" style="color:#27ae60;font-size:12px">設定を入力してプレビューを確認</div>
+    </div>
+    <div class="btn-row">
+      <button onclick="calcAutoPlacePreview()">プレビュー</button>
+      <button class="btn-cancel" onclick="closeModal('modal-autoplace')">キャンセル</button>
+      <button onclick="executeAutoPlace()">実行</button>
+    </div>
+  </div>
+</div>
+
+<!-- ITEM PROPS MODAL -->
+<div class="modal-overlay" id="modal-itemprops">
+  <div class="modal">
+    <h2>アイテムプロパティ</h2>
+    <div id="itemprops-content"></div>
+    <div class="btn-row">
+      <button class="btn-cancel" onclick="closeModal('modal-itemprops')">キャンセル</button>
+      <button onclick="applyItemProps()">適用</button>
+    </div>
+  </div>
+</div>
+
+<!-- 3D VIEW -->
+<div id="view3d-overlay">
+  <div id="view3d-toolbar">
+    <span style="color:#e94560;font-weight:bold;font-size:14px">3D表示</span>
+    <button onclick="reset3DCamera()">カメラリセット</button>
+    <button onclick="toggle3DWireframe()">ワイヤーフレーム</button>
+    <button onclick="close3DView()" style="margin-left:auto;border-color:#e74c3c">閉じる</button>
+  </div>
+  <canvas id="view3d-canvas"></canvas>
+</div>
+
+<script>
+'use strict';
+
+// ===================== APP STATE =====================
+const APP = {
+  warehouse: { name: '倉庫1', width: 30000, depth: 20000, height: 6000 },
+  masters: {
+    nesting: { width: 1350, depth: 1200, height: 1700, pallets: 4, label: 'ネスティングラック', color: '#2980b9' },
+    pallet:  { width: 2700, depth: 1100, height: 5000, rows: 1, levels: 4, label: 'パレットラック', color: '#8e44ad' },
+    shelf:   { width: 900,  depth: 450,  height: 1800, shelves: 5, label: '軽量棚', color: '#27ae60' },
+    flat:    { width: 5000, depth: 3000, height: 0, label: '平置きエリア', color: '#e67e22' },
+    work:    { width: 3000, depth: 3000, height: 0, label: '作業エリア', color: '#16a085' },
+  },
+  obstacleDefaults: {
+    pillar:       { width: 500,  depth: 500,  label: '柱',    color: '#7f8c8d', clearance: 0 },
+    shutter:      { width: 3000, depth: 300,  label: 'シャッター', color: '#95a5a6', clearance: 3000 },
+    dock:         { width: 3500, depth: 1000, label: 'ドック', color: '#d35400', clearance: 4000 },
+    fire_hydrant: { width: 400,  depth: 400,  label: '消火栓', color: '#e74c3c', clearance: 1000 },
+    panel:        { width: 600,  depth: 200,  label: '分電盤', color: '#f39c12', clearance: 500 },
+    office:       { width: 5000, depth: 4000, label: '事務所', color: '#2c3e50', clearance: 0 },
+    toilet:       { width: 2000, depth: 2000, label: 'トイレ', color: '#1abc9c', clearance: 0 },
+  },
+  items: [],
+  obstacles: [],
+  scale: 0.025,
+  offset: { x: 40, y: 40 },
+  selected: null,
+  dragging: null,
+  dragStartMm: null,
+  dragItemOrigin: null,
+  placingType: null,
+  placingIsObstacle: false,
+  tool: 'select',
+  showGrid: true,
+  showDimensions: true,
+  showHeatmap: false,
+  showValidation: true,
+  forkliftType: 'reach',
+  history: [],
+  historyIndex: -1,
+  isPanning: false,
+  panStart: null,
+  offsetAtPanStart: null,
+  nextId: 1,
+  ctxTarget: null,
+};
+
+// ===================== CANVAS SETUP =====================
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+function resizeCanvas() {
+  const container = document.getElementById('center');
+  canvas.width = container.clientWidth;
+  canvas.height = container.clientHeight;
+  renderAll();
+}
+
+window.addEventListener('resize', resizeCanvas);
+
+// ===================== COORDINATE UTILS =====================
+function mmToPx(mm) { return mm * APP.scale; }
+function pxToMm(px) { return px / APP.scale; }
+function mmToScreen(mmX, mmY) {
+  return { x: mmX * APP.scale + APP.offset.x, y: mmY * APP.scale + APP.offset.y };
+}
+function screenToMm(sx, sy) {
+  return { x: (sx - APP.offset.x) / APP.scale, y: (sy - APP.offset.y) / APP.scale };
+}
+function snapMm(v, shift) {
+  const snap = shift ? 50 : 100;
+  return Math.round(v / snap) * snap;
+}
+
+// ===================== HISTORY =====================
+function pushHistory() {
+  const state = JSON.stringify({ items: APP.items, obstacles: APP.obstacles });
+  if (APP.historyIndex < APP.history.length - 1) {
+    APP.history.splice(APP.historyIndex + 1);
+  }
+  APP.history.push(state);
+  if (APP.history.length > 50) APP.history.shift();
+  APP.historyIndex = APP.history.length - 1;
+}
+
+function undoAction() {
+  if (APP.historyIndex <= 0) return;
+  APP.historyIndex--;
+  const state = JSON.parse(APP.history[APP.historyIndex]);
+  APP.items = state.items;
+  APP.obstacles = state.obstacles;
+  APP.selected = null;
+  renderAll();
+  updateRightPanel();
+}
+
+function redoAction() {
+  if (APP.historyIndex >= APP.history.length - 1) return;
+  APP.historyIndex++;
+  const state = JSON.parse(APP.history[APP.historyIndex]);
+  APP.items = state.items;
+  APP.obstacles = state.obstacles;
+  APP.selected = null;
+  renderAll();
+  updateRightPanel();
+}
+
+// ===================== RENDER =====================
+function renderAll() {
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  // Background
+  ctx.fillStyle = '#0a0a1a';
+  ctx.fillRect(0, 0, W, H);
+
+  if (APP.showGrid) drawGrid();
+  drawWarehouse();
+  if (APP.showHeatmap) drawHeatmap();
+  drawObstacles();
+  drawItems();
+  if (APP.showValidation) drawValidationOverlay();
+  if (APP.showDimensions) drawDimensions();
+  drawSelectionHandles();
+
+  updateStatusBar();
+}
+
+function drawGrid() {
+  const gridMm = 1000;
+  const subGridMm = 500;
+  const W = canvas.width, H = canvas.height;
+
+  // Sub-grid
+  ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+  ctx.lineWidth = 0.5;
+  const startX0 = Math.floor((-APP.offset.x / APP.scale) / subGridMm) * subGridMm;
+  const startY0 = Math.floor((-APP.offset.y / APP.scale) / subGridMm) * subGridMm;
+  for (let x = startX0; x < pxToMm(W - APP.offset.x); x += subGridMm) {
+    const sx = mmToScreen(x, 0).x;
+    if (sx < 0 || sx > W) continue;
+    ctx.beginPath(); ctx.moveTo(sx, 0); ctx.lineTo(sx, H); ctx.stroke();
+  }
+  for (let y = startY0; y < pxToMm(H - APP.offset.y); y += subGridMm) {
+    const sy = mmToScreen(0, y).y;
+    if (sy < 0 || sy > H) continue;
+    ctx.beginPath(); ctx.moveTo(0, sy); ctx.lineTo(W, sy); ctx.stroke();
+  }
+
+  // Main grid
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  ctx.lineWidth = 1;
+  const startX = Math.floor((-APP.offset.x / APP.scale) / gridMm) * gridMm;
+  const startY = Math.floor((-APP.offset.y / APP.scale) / gridMm) * gridMm;
+  ctx.font = '9px sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.2)';
+  for (let x = startX; x < pxToMm(W - APP.offset.x) + gridMm; x += gridMm) {
+    const sx = mmToScreen(x, 0).x;
+    if (sx < 0 || sx > W) continue;
+    ctx.beginPath(); ctx.moveTo(sx, 0); ctx.lineTo(sx, H); ctx.stroke();
+    if (x >= 0 && x <= APP.warehouse.width) ctx.fillText((x/1000).toFixed(0)+'m', sx+2, 12);
+  }
+  for (let y = startY; y < pxToMm(H - APP.offset.y) + gridMm; y += gridMm) {
+    const sy = mmToScreen(0, y).y;
+    if (sy < 0 || sy > H) continue;
+    ctx.beginPath(); ctx.moveTo(0, sy); ctx.lineTo(W, sy); ctx.stroke();
+    if (y >= 0 && y <= APP.warehouse.depth) ctx.fillText((y/1000).toFixed(0)+'m', 2, sy - 2);
+  }
+}
+
+function drawWarehouse() {
+  const { x: sx, y: sy } = mmToScreen(0, 0);
+  const sw = mmToPx(APP.warehouse.width);
+  const sd = mmToPx(APP.warehouse.depth);
+
+  // Floor
+  ctx.fillStyle = 'rgba(15,52,96,0.3)';
+  ctx.fillRect(sx, sy, sw, sd);
+
+  // Border
+  ctx.strokeStyle = '#e94560';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(sx, sy, sw, sd);
+
+  // Name
+  ctx.fillStyle = '#e94560';
+  ctx.font = 'bold 14px sans-serif';
+  ctx.fillText(APP.warehouse.name, sx + 8, sy + 20);
+
+  // Dimensions
+  if (APP.showDimensions) {
+    ctx.fillStyle = '#aaa';
+    ctx.font = '11px sans-serif';
+    ctx.fillText((APP.warehouse.width/1000).toFixed(1) + 'm', sx + sw/2 - 20, sy - 6);
+    ctx.save();
+    ctx.translate(sx - 10, sy + sd/2);
+    ctx.rotate(-Math.PI/2);
+    ctx.fillText((APP.warehouse.depth/1000).toFixed(1) + 'm', -20, 0);
+    ctx.restore();
+  }
+}
+
+function getItemBounds(item) {
+  let w = item.width, d = item.depth;
+  if (item.rotation === 90 || item.rotation === 270) { w = item.depth; d = item.width; }
+  return { x: item.x, y: item.y, w, d };
+}
+
+function drawItems() {
+  for (const item of APP.items) {
+    drawItem(item, item === APP.selected);
+  }
+}
+
+function drawItem(item, selected) {
+  const master = APP.masters[item.type];
+  if (!master) return;
+  const { x: sx, y: sy } = mmToScreen(item.x, item.y);
+  const b = getItemBounds(item);
+  const sw = mmToPx(b.w);
+  const sd = mmToPx(b.d);
+
+  ctx.save();
+
+  // Fill
+  ctx.fillStyle = master.color + '55';
+  ctx.fillRect(sx, sy, sw, sd);
+
+  // Border
+  ctx.strokeStyle = selected ? '#fff' : master.color;
+  ctx.lineWidth = selected ? 2 : 1.5;
+  ctx.strokeRect(sx, sy, sw, sd);
+
+  // Pattern for rack types
+  if (item.type === 'nesting' || item.type === 'pallet') {
+    ctx.strokeStyle = master.color + '88';
+    ctx.lineWidth = 0.5;
+    const cols = item.type === 'nesting' ? 2 : 1;
+    const rows = item.type === 'nesting' ? 2 : (master.levels || 4);
+    for (let c = 1; c < cols; c++) {
+      const lx = sx + sw * c / cols;
+      ctx.beginPath(); ctx.moveTo(lx, sy); ctx.lineTo(lx, sy + sd); ctx.stroke();
+    }
+    for (let r = 1; r < rows; r++) {
+      const ly = sy + sd * r / rows;
+      ctx.beginPath(); ctx.moveTo(sx, ly); ctx.lineTo(sx + sw, ly); ctx.stroke();
+    }
+  }
+
+  // Label
+  ctx.fillStyle = '#fff';
+  ctx.font = `${Math.max(8, Math.min(12, mmToPx(b.w) / 8))}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const label = master.label;
+  ctx.fillText(label, sx + sw/2, sy + sd/2 - 6);
+  ctx.font = '9px sans-serif';
+  ctx.fillStyle = '#ccc';
+  ctx.fillText(`${b.w}×${b.d}`, sx + sw/2, sy + sd/2 + 8);
+
+  if (item.count > 1) {
+    ctx.fillStyle = '#e94560';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.fillText('×' + item.count, sx + sw - 10, sy + 12);
+  }
+
+  ctx.restore();
+}
+
+function drawObstacles() {
+  for (const obs of APP.obstacles) {
+    drawObstacle(obs, obs === APP.selected);
+  }
+}
+
+function drawObstacle(obs, selected) {
+  const def = APP.obstacleDefaults[obs.type];
+  if (!def) return;
+  const b = getItemBounds(obs);
+  const { x: sx, y: sy } = mmToScreen(b.x, b.y);
+  const sw = mmToPx(b.w);
+  const sd = mmToPx(b.d);
+
+  // Clearance zone
+  if (def.clearance > 0 && APP.showValidation) {
+    const cl = mmToPx(def.clearance);
+    ctx.fillStyle = 'rgba(231,76,60,0.1)';
+    ctx.strokeStyle = 'rgba(231,76,60,0.3)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.strokeRect(sx - cl, sy - cl, sw + cl*2, sd + cl*2);
+    ctx.fillRect(sx - cl, sy - cl, sw + cl*2, sd + cl*2);
+    ctx.setLineDash([]);
+  }
+
+  ctx.fillStyle = def.color + '88';
+  ctx.fillRect(sx, sy, sw, sd);
+  ctx.strokeStyle = selected ? '#fff' : def.color;
+  ctx.lineWidth = selected ? 2 : 1.5;
+  ctx.strokeRect(sx, sy, sw, sd);
+
+  // Hatch for obstacles
+  ctx.save();
+  ctx.clip();
+  ctx.strokeStyle = def.color + '44';
+  ctx.lineWidth = 1;
+  for (let i = -sw; i < sw + sd; i += 8) {
+    ctx.beginPath();
+    ctx.moveTo(sx + i, sy);
+    ctx.lineTo(sx + i + sd, sy + sd);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  ctx.fillStyle = '#fff';
+  ctx.font = `${Math.max(8, Math.min(11, sw / 6))}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(def.label, sx + sw/2, sy + sd/2);
+}
+
+function drawHeatmap() {
+  const GRID = 500; // mm
+  const cols = Math.ceil(APP.warehouse.width / GRID);
+  const rows = Math.ceil(APP.warehouse.depth / GRID);
+  const density = new Array(cols * rows).fill(0);
+
+  for (const item of APP.items) {
+    const b = getItemBounds(item);
+    const c0 = Math.floor(b.x / GRID);
+    const r0 = Math.floor(b.y / GRID);
+    const c1 = Math.ceil((b.x + b.w) / GRID);
+    const r1 = Math.ceil((b.y + b.d) / GRID);
+    for (let r = r0; r < r1; r++) {
+      for (let c = c0; c < c1; c++) {
+        if (c >= 0 && c < cols && r >= 0 && r < rows) density[r * cols + c]++;
+      }
+    }
+  }
+
+  const maxD = Math.max(...density, 1);
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const d = density[r * cols + c];
+      if (d === 0) continue;
+      const t = d / maxD;
+      const { x: sx, y: sy } = mmToScreen(c * GRID, r * GRID);
+      const sw = mmToPx(GRID), sh = mmToPx(GRID);
+      const r_ = Math.round(t * 231 + (1-t) * 39);
+      const g_ = Math.round(t * 76 + (1-t) * 174);
+      const b_ = Math.round(t * 60 + (1-t) * 96);
+      ctx.fillStyle = `rgba(${r_},${g_},${b_},0.4)`;
+      ctx.fillRect(sx, sy, sw, sh);
+    }
+  }
+}
+
+function drawValidationOverlay() {
+  const issues = validateLayout();
+  for (const issue of issues) {
+    if (issue.type === 'overlap' && issue.bounds) {
+      const b = issue.bounds;
+      const { x: sx, y: sy } = mmToScreen(b.x, b.y);
+      ctx.fillStyle = 'rgba(231,76,60,0.3)';
+      ctx.fillRect(sx, sy, mmToPx(b.w), mmToPx(b.d));
+      ctx.strokeStyle = '#e74c3c';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 2]);
+      ctx.strokeRect(sx, sy, mmToPx(b.w), mmToPx(b.d));
+      ctx.setLineDash([]);
+    }
+  }
+}
+
+function drawDimensions() {
+  if (!APP.selected) return;
+  const item = APP.selected;
+  const b = getItemBounds(item);
+  const { x: sx, y: sy } = mmToScreen(b.x, b.y);
+  const sw = mmToPx(b.w), sd = mmToPx(b.d);
+
+  ctx.strokeStyle = '#f39c12';
+  ctx.fillStyle = '#f39c12';
+  ctx.lineWidth = 1;
+  ctx.font = '10px sans-serif';
+  ctx.textAlign = 'center';
+
+  // Width arrow
+  const arrowY = sy - 14;
+  ctx.beginPath(); ctx.moveTo(sx, arrowY); ctx.lineTo(sx + sw, arrowY); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(sx, arrowY-3); ctx.lineTo(sx, arrowY+3); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(sx+sw, arrowY-3); ctx.lineTo(sx+sw, arrowY+3); ctx.stroke();
+  ctx.fillText(b.w + 'mm', sx + sw/2, arrowY - 4);
+
+  // Depth arrow
+  const arrowX = sx - 14;
+  ctx.beginPath(); ctx.moveTo(arrowX, sy); ctx.lineTo(arrowX, sy + sd); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(arrowX-3, sy); ctx.lineTo(arrowX+3, sy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(arrowX-3, sy+sd); ctx.lineTo(arrowX+3, sy+sd); ctx.stroke();
+  ctx.save();
+  ctx.translate(arrowX - 4, sy + sd/2);
+  ctx.rotate(-Math.PI/2);
+  ctx.fillText(b.d + 'mm', 0, 0);
+  ctx.restore();
+}
+
+function drawSelectionHandles() {
+  if (!APP.selected) return;
+  const item = APP.selected;
+  const b = getItemBounds(item);
+  const { x: sx, y: sy } = mmToScreen(b.x, b.y);
+  const sw = mmToPx(b.w), sd = mmToPx(b.d);
+
+  const handles = [
+    [sx, sy], [sx+sw/2, sy], [sx+sw, sy],
+    [sx, sy+sd/2], [sx+sw, sy+sd/2],
+    [sx, sy+sd], [sx+sw/2, sy+sd], [sx+sw, sy+sd],
+  ];
+  ctx.fillStyle = '#fff';
+  ctx.strokeStyle = '#e94560';
+  ctx.lineWidth = 1;
+  for (const [hx, hy] of handles) {
+    ctx.fillRect(hx-4, hy-4, 8, 8);
+    ctx.strokeRect(hx-4, hy-4, 8, 8);
+  }
+}
+
+// ===================== VALIDATION =====================
+function validateLayout() {
+  const issues = [];
+  const forkliftAisle = APP.forkliftType === 'counter' ? 3500 : APP.forkliftType === 'hand' ? 1800 : 2700;
+
+  // Check items out of bounds
+  for (const item of APP.items) {
+    const b = getItemBounds(item);
+    if (b.x < 0 || b.y < 0 || b.x + b.w > APP.warehouse.width || b.y + b.d > APP.warehouse.depth) {
+      issues.push({ level: 'error', msg: `"${APP.masters[item.type]?.label}" が倉庫外に配置されています`, item });
+    }
+  }
+
+  // Check overlaps
+  const allItems = [...APP.items, ...APP.obstacles];
+  for (let i = 0; i < allItems.length; i++) {
+    for (let j = i+1; j < allItems.length; j++) {
+      const a = getItemBounds(allItems[i]);
+      const b = getItemBounds(allItems[j]);
+      const ox = Math.max(0, Math.min(a.x+a.w, b.x+b.w) - Math.max(a.x, b.x));
+      const oy = Math.max(0, Math.min(a.y+a.d, b.y+b.d) - Math.max(a.y, b.y));
+      if (ox > 0 && oy > 0) {
+        const bx = Math.max(a.x, b.x), by = Math.max(a.y, b.y);
+        issues.push({ level: 'error', type: 'overlap', msg: 'アイテムが重なっています', bounds: { x: bx, y: by, w: ox, d: oy } });
+      }
+    }
+  }
+
+  // Check obstacle clearances
+  for (const obs of APP.obstacles) {
+    const def = APP.obstacleDefaults[obs.type];
+    if (!def || def.clearance === 0) continue;
+    const ob = getItemBounds(obs);
+    const cl = def.clearance;
+    const zone = { x: ob.x - cl, y: ob.y - cl, w: ob.w + cl*2, d: ob.d + cl*2 };
+    for (const item of APP.items) {
+      const ib = getItemBounds(item);
+      const ox = Math.max(0, Math.min(zone.x+zone.w, ib.x+ib.w) - Math.max(zone.x, ib.x));
+      const oy = Math.max(0, Math.min(zone.y+zone.d, ib.y+ib.d) - Math.max(zone.y, ib.y));
+      if (ox > 0 && oy > 0) {
+        issues.push({ level: 'warning', msg: `${def.label}のクリアランス(${cl}mm)内にラックがあります` });
+      }
+    }
+  }
+
+  // Summary
+  if (issues.length === 0) {
+    issues.push({ level: 'ok', msg: '問題は検出されませんでした' });
+  }
+
+  return issues;
+}
+
+function updateValidationPanel() {
+  const issues = validateLayout();
+  const el = document.getElementById('validation-content');
+  el.innerHTML = issues.map(i =>
+    `<div class="validation-item ${i.level}">${i.msg}</div>`
+  ).join('');
+}
+
+// ===================== STATS =====================
+function calcStats() {
+  const wArea = APP.warehouse.width * APP.warehouse.depth / 1e6; // m²
+  let usedArea = 0;
+  const counts = {};
+  for (const item of APP.items) {
+    const b = getItemBounds(item);
+    usedArea += b.w * b.d / 1e6;
+    counts[item.type] = (counts[item.type] || 0) + (item.count || 1);
+  }
+  let obsArea = 0;
+  for (const obs of APP.obstacles) {
+    const b = getItemBounds(obs);
+    obsArea += b.w * b.d / 1e6;
+  }
+  const util = wArea > 0 ? (usedArea / (wArea - obsArea) * 100) : 0;
+  return { wArea, usedArea, obsArea, util, counts };
+}
+
+function updateStatsPanel() {
+  const s = calcStats();
+  const el = document.getElementById('stats-content');
+  let html = `
+    <div class="stat-row"><span>倉庫面積</span><span class="stat-val">${s.wArea.toFixed(1)} m²</span></div>
+    <div class="stat-row"><span>使用面積</span><span class="stat-val">${s.usedArea.toFixed(1)} m²</span></div>
+    <div class="stat-row"><span>障害物面積</span><span class="stat-val">${s.obsArea.toFixed(1)} m²</span></div>
+    <div class="stat-row"><span>空間利用率</span><span class="stat-val">${s.util.toFixed(1)}%</span></div>
+  `;
+  for (const [type, cnt] of Object.entries(s.counts)) {
+    const m = APP.masters[type];
+    if (m) html += `<div class="stat-row"><span>${m.label}</span><span class="stat-val">${cnt}台</span></div>`;
+  }
+  el.innerHTML = html;
+}
+
+function updateRackList() {
+  const el = document.getElementById('rack-list');
+  el.innerHTML = APP.items.map((item, idx) => {
+    const m = APP.masters[item.type];
+    const selected = item === APP.selected;
+    return `<div class="rack-list-item ${selected ? 'selected' : ''}" onclick="selectItemById(${item.id})">
+      <span>${m?.label || item.type}</span>
+      <span style="color:#888">${Math.round(item.x/100)/10},${Math.round(item.y/100)/10}m</span>
+    </div>`;
+  }).join('') + APP.obstacles.map((obs, idx) => {
+    const d = APP.obstacleDefaults[obs.type];
+    const selected = obs === APP.selected;
+    return `<div class="rack-list-item ${selected ? 'selected' : ''}" onclick="selectObsById(${obs.id})" style="border-left:3px solid ${d?.color||'#888'}">
+      <span>${d?.label || obs.type}</span>
+      <span style="color:#888">${Math.round(obs.x/100)/10},${Math.round(obs.y/100)/10}m</span>
+    </div>`;
+  }).join('');
+}
+
+function selectItemById(id) {
+  APP.selected = APP.items.find(i => i.id === id) || null;
+  renderAll();
+  updateRightPanel();
+}
+
+function selectObsById(id) {
+  APP.selected = APP.obstacles.find(o => o.id === id) || null;
+  renderAll();
+  updateRightPanel();
+}
+
+function updateRightPanel() {
+  updateStatsPanel();
+  updateValidationPanel();
+  updateRackList();
+  updatePropsPanel();
+}
+
+function updatePropsPanel() {
+  const item = APP.selected;
+  const propSection = document.getElementById('props-section');
+  if (!item) {
+    propSection.style.display = 'none';
+    return;
+  }
+  propSection.style.display = 'block';
+  const isObs = APP.obstacles.includes(item);
+  const def = isObs ? APP.obstacleDefaults[item.type] : APP.masters[item.type];
+  const el = document.getElementById('props-content');
+  el.innerHTML = `
+    <div class="prop-row"><label>種別</label><span style="color:#e94560">${def?.label || item.type}</span></div>
+    <div class="prop-row"><label>X (mm)</label><input type="number" id="prop-x" value="${Math.round(item.x)}" onchange="updateItemProp('x',this.value)"></div>
+    <div class="prop-row"><label>Y (mm)</label><input type="number" id="prop-y" value="${Math.round(item.y)}" onchange="updateItemProp('y',this.value)"></div>
+    <div class="prop-row"><label>幅 (mm)</label><input type="number" id="prop-w" value="${Math.round(item.width)}" onchange="updateItemProp('width',this.value)"></div>
+    <div class="prop-row"><label>奥行 (mm)</label><input type="number" id="prop-d" value="${Math.round(item.depth)}" onchange="updateItemProp('depth',this.value)"></div>
+    <div class="prop-row"><label>回転</label><select id="prop-rot" onchange="updateItemProp('rotation',this.value)">
+      ${[0,90,180,270].map(r=>`<option value="${r}" ${item.rotation===r?'selected':''}>${r}°</option>`).join('')}
+    </select></div>
+    ${!isObs ? `<div class="prop-row"><label>数量</label><input type="number" id="prop-count" value="${item.count||1}" min="1" onchange="updateItemProp('count',this.value)"></div>` : ''}
+    <div style="margin-top:8px;display:flex;gap:6px">
+      <button onclick="rotateSelected()">回転</button>
+      <button onclick="deleteSelected()" style="border-color:#e74c3c">削除</button>
+    </div>
+  `;
+}
+
+function updateItemProp(prop, val) {
+  if (!APP.selected) return;
+  pushHistory();
+  const v = prop === 'rotation' ? parseInt(val) : parseFloat(val);
+  APP.selected[prop] = v;
+  renderAll();
+  updateRightPanel();
+}
+
+// ===================== MOUSE EVENTS =====================
+let lastMouseMm = { x: 0, y: 0 };
+let shiftDown = false;
+
+canvas.addEventListener('mousedown', onMouseDown);
+canvas.addEventListener('mousemove', onMouseMove);
+canvas.addEventListener('mouseup', onMouseUp);
+canvas.addEventListener('wheel', onWheel, { passive: false });
+canvas.addEventListener('contextmenu', onContextMenu);
+canvas.addEventListener('dblclick', onDblClick);
+
+function getCanvasPos(e) {
+  const rect = canvas.getBoundingClientRect();
+  return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+}
+
+function hitTestItems(mx, my) {
+  // Check obstacles first
+  for (let i = APP.obstacles.length - 1; i >= 0; i--) {
+    const obs = APP.obstacles[i];
+    const b = getItemBounds(obs);
+    if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.d) return obs;
+  }
+  // Check items
+  for (let i = APP.items.length - 1; i >= 0; i--) {
+    const item = APP.items[i];
+    const b = getItemBounds(item);
+    if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.d) return item;
+  }
+  return null;
+}
+
+function onMouseDown(e) {
+  const pos = getCanvasPos(e);
+  const mm = screenToMm(pos.x, pos.y);
+  lastMouseMm = mm;
+
+  if (e.button === 1 || (e.button === 0 && APP.tool === 'pan')) {
+    APP.isPanning = true;
+    APP.panStart = pos;
+    APP.offsetAtPanStart = { ...APP.offset };
+    canvas.classList.add('panning');
+    return;
+  }
+
+  if (e.button === 0) {
+    if (APP.tool === 'place' && APP.placingType) {
+      placeItem(mm, e.shiftKey);
+      return;
+    }
+
+    if (APP.tool === 'select') {
+      const hit = hitTestItems(mm.x, mm.y);
+      if (hit) {
+        pushHistory();
+        APP.selected = hit;
+        APP.dragging = hit;
+        APP.dragStartMm = mm;
+        APP.dragItemOrigin = { x: hit.x, y: hit.y };
+      } else {
+        APP.selected = null;
+      }
+      renderAll();
+      updateRightPanel();
+    }
+  }
+}
+
+function onMouseMove(e) {
+  const pos = getCanvasPos(e);
+  const mm = screenToMm(pos.x, pos.y);
+  lastMouseMm = mm;
+  shiftDown = e.shiftKey;
+
+  // Update cursor display
+  document.getElementById('sb-cursor').textContent =
+    `X: ${Math.round(mm.x)}mm, Y: ${Math.round(mm.y)}mm`;
+
+  if (APP.isPanning) {
+    const dx = pos.x - APP.panStart.x;
+    const dy = pos.y - APP.panStart.y;
+    APP.offset.x = APP.offsetAtPanStart.x + dx;
+    APP.offset.y = APP.offsetAtPanStart.y + dy;
+    renderAll();
+    return;
+  }
+
+  if (APP.dragging) {
+    const dx = mm.x - APP.dragStartMm.x;
+    const dy = mm.y - APP.dragStartMm.y;
+    let nx = APP.dragItemOrigin.x + dx;
+    let ny = APP.dragItemOrigin.y + dy;
+    nx = snapMm(nx, e.shiftKey);
+    ny = snapMm(ny, e.shiftKey);
+    nx = Math.max(0, Math.min(nx, APP.warehouse.width - APP.dragging.width));
+    ny = Math.max(0, Math.min(ny, APP.warehouse.depth - APP.dragging.depth));
+    APP.dragging.x = nx;
+    APP.dragging.y = ny;
+    renderAll();
+    updateRightPanel();
+    return;
+  }
+
+  // Ghost for placing
+  if (APP.tool === 'place' && APP.placingType) {
+    renderAll();
+    drawPlacingGhost(mm, e.shiftKey);
+  }
+}
+
+function onMouseUp(e) {
+  if (APP.isPanning) {
+    APP.isPanning = false;
+    canvas.classList.remove('panning');
+  }
+  if (APP.dragging) {
+    APP.dragging = null;
+  }
+}
+
+function onWheel(e) {
+  e.preventDefault();
+  const pos = getCanvasPos(e);
+  const factor = e.deltaY < 0 ? 1.1 : 0.9;
+  const mm = screenToMm(pos.x, pos.y);
+  APP.scale *= factor;
+  APP.scale = Math.max(0.005, Math.min(0.2, APP.scale));
+  APP.offset.x = pos.x - mm.x * APP.scale;
+  APP.offset.y = pos.y - mm.y * APP.scale;
+  updateStatusBarScale();
+  renderAll();
+}
+
+function onContextMenu(e) {
+  e.preventDefault();
+  const pos = getCanvasPos(e);
+  const mm = screenToMm(pos.x, pos.y);
+  const hit = hitTestItems(mm.x, mm.y);
+  APP.ctxTarget = hit;
+  if (hit) {
+    APP.selected = hit;
+    renderAll();
+    updateRightPanel();
+  }
+  const menu = document.getElementById('ctx-menu');
+  menu.style.left = e.clientX + 'px';
+  menu.style.top = e.clientY + 'px';
+  menu.classList.add('show');
+}
+
+function onDblClick(e) {
+  const pos = getCanvasPos(e);
+  const mm = screenToMm(pos.x, pos.y);
+  const hit = hitTestItems(mm.x, mm.y);
+  if (hit) {
+    APP.selected = hit;
+    openItemPropsModal(hit);
+  }
+}
+
+document.addEventListener('click', () => {
+  document.getElementById('ctx-menu').classList.remove('show');
+});
+
+// ===================== CONTEXT MENU ACTIONS =====================
+function ctxAction(action) {
+  document.getElementById('ctx-menu').classList.remove('show');
+  if (!APP.ctxTarget && action !== 'select') return;
+  switch (action) {
+    case 'select':
+      break;
+    case 'rotate':
+      APP.selected = APP.ctxTarget;
+      rotateSelected();
+      break;
+    case 'duplicate':
+      APP.selected = APP.ctxTarget;
+      duplicateSelected();
+      break;
+    case 'props':
+      APP.selected = APP.ctxTarget;
+      openItemPropsModal(APP.ctxTarget);
+      break;
+    case 'delete':
+      APP.selected = APP.ctxTarget;
+      deleteSelected();
+      break;
+  }
+}
+
+// ===================== ITEM PLACEMENT =====================
+function placeItem(mm, shift) {
+  const type = APP.placingType;
+  const isObs = APP.placingIsObstacle;
+
+  let def, newItem;
+  if (isObs) {
+    def = APP.obstacleDefaults[type];
+    if (!def) return;
+    pushHistory();
+    newItem = {
+      id: APP.nextId++,
+      type,
+      x: snapMm(mm.x, shift),
+      y: snapMm(mm.y, shift),
+      width: def.width,
+      depth: def.depth,
+      rotation: 0
+    };
+    APP.obstacles.push(newItem);
+  } else {
+    def = APP.masters[type];
+    if (!def) return;
+    pushHistory();
+    newItem = {
+      id: APP.nextId++,
+      type,
+      x: snapMm(mm.x, shift),
+      y: snapMm(mm.y, shift),
+      width: def.width,
+      depth: def.depth,
+      rotation: 0,
+      count: 1
+    };
+    APP.items.push(newItem);
+  }
+
+  APP.selected = newItem;
+  renderAll();
+  updateRightPanel();
+}
+
+function drawPlacingGhost(mm, shift) {
+  const type = APP.placingType;
+  const isObs = APP.placingIsObstacle;
+  const def = isObs ? APP.obstacleDefaults[type] : APP.masters[type];
+  if (!def) return;
+
+  const sx = snapMm(mm.x, shift);
+  const sy = snapMm(mm.y, shift);
+  const { x: px, y: py } = mmToScreen(sx, sy);
+  const pw = mmToPx(def.width);
+  const pd = mmToPx(def.depth);
+
+  ctx.globalAlpha = 0.6;
+  ctx.fillStyle = (def.color || '#888') + '88';
+  ctx.fillRect(px, py, pw, pd);
+  ctx.strokeStyle = def.color || '#888';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([4, 4]);
+  ctx.strokeRect(px, py, pw, pd);
+  ctx.setLineDash([]);
+  ctx.globalAlpha = 1.0;
+}
+
+// ===================== PARTS LIBRARY SETUP =====================
+function buildPartsLibrary() {
+  const container = document.getElementById('parts-library');
+  container.innerHTML = '';
+  for (const [type, master] of Object.entries(APP.masters)) {
+    const div = document.createElement('div');
+    div.className = 'part-item';
+    div.innerHTML = `
+      <div class="color-dot" style="background:${master.color}"></div>
+      <div class="part-info">
+        <div class="part-name">${master.label}</div>
+        <div class="part-dim">${master.width}×${master.depth}mm H:${master.height}mm</div>
+      </div>
+    `;
+    div.addEventListener('click', () => {
+      setTool('place');
+      APP.placingType = type;
+      APP.placingIsObstacle = false;
+      highlightPartItem(div);
+    });
+    div.addEventListener('dragstart', (e) => {
+      e.dataTransfer.setData('type', type);
+      e.dataTransfer.setData('isObs', 'false');
+    });
+    div.draggable = true;
+    container.appendChild(div);
+  }
+}
+
+function buildObstaclesLibrary() {
+  const container = document.getElementById('obstacles-library');
+  container.innerHTML = '';
+  for (const [type, def] of Object.entries(APP.obstacleDefaults)) {
+    const div = document.createElement('div');
+    div.className = 'obstacle-item';
+    div.innerHTML = `
+      <div class="color-dot" style="background:${def.color}"></div>
+      <div class="part-info">
+        <div class="part-name">${def.label}</div>
+        <div class="part-dim">${def.width}×${def.depth}mm</div>
+      </div>
+    `;
+    div.addEventListener('click', () => {
+      setTool('place');
+      APP.placingType = type;
+      APP.placingIsObstacle = true;
+      highlightPartItem(div);
+    });
+    container.appendChild(div);
+  }
+}
+
+let lastHighlightedPart = null;
+function highlightPartItem(div) {
+  if (lastHighlightedPart) lastHighlightedPart.style.borderColor = '';
+  div.style.borderColor = '#e94560';
+  lastHighlightedPart = div;
+}
+
+// Canvas drag-drop
+canvas.addEventListener('dragover', (e) => e.preventDefault());
+canvas.addEventListener('drop', (e) => {
+  e.preventDefault();
+  const type = e.dataTransfer.getData('type');
+  const isObs = e.dataTransfer.getData('isObs') === 'true';
+  const pos = getCanvasPos(e);
+  const mm = screenToMm(pos.x, pos.y);
+  APP.placingType = type;
+  APP.placingIsObstacle = isObs;
+  placeItem(mm, false);
+});
+
+// ===================== TOOLBAR ACTIONS =====================
+function setTool(tool) {
+  APP.tool = tool;
+  document.querySelectorAll('#toolbar button[id^="tool-"]').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById('tool-' + tool);
+  if (btn) btn.classList.add('active');
+  canvas.className = 'tool-' + tool;
+  if (tool !== 'place') {
+    APP.placingType = null;
+    if (lastHighlightedPart) { lastHighlightedPart.style.borderColor = ''; lastHighlightedPart = null; }
+  }
+}
+
+function rotateSelected() {
+  if (!APP.selected) return;
+  pushHistory();
+  APP.selected.rotation = ((APP.selected.rotation || 0) + 90) % 360;
+  // Swap width/depth for odd rotations
+  if (APP.selected.rotation === 90 || APP.selected.rotation === 270) {
+    // keep original dimensions, just render rotated via getItemBounds
+  }
+  renderAll();
+  updateRightPanel();
+}
+
+function deleteSelected() {
+  if (!APP.selected) return;
+  pushHistory();
+  APP.items = APP.items.filter(i => i !== APP.selected);
+  APP.obstacles = APP.obstacles.filter(o => o !== APP.selected);
+  APP.selected = null;
+  renderAll();
+  updateRightPanel();
+}
+
+function duplicateSelected() {
+  if (!APP.selected) return;
+  pushHistory();
+  const src = APP.selected;
+  const copy = { ...src, id: APP.nextId++, x: src.x + 500, y: src.y + 500 };
+  if (APP.items.includes(src)) {
+    APP.items.push(copy);
+  } else {
+    APP.obstacles.push(copy);
+  }
+  APP.selected = copy;
+  renderAll();
+  updateRightPanel();
+}
+
+function toggleGrid() {
+  APP.showGrid = !APP.showGrid;
+  document.getElementById('btn-grid').classList.toggle('active', APP.showGrid);
+  renderAll();
+}
+function toggleDimensions() {
+  APP.showDimensions = !APP.showDimensions;
+  document.getElementById('btn-dim').classList.toggle('active', APP.showDimensions);
+  renderAll();
+}
+function toggleHeatmap() {
+  APP.showHeatmap = !APP.showHeatmap;
+  document.getElementById('btn-heat').classList.toggle('active', APP.showHeatmap);
+  renderAll();
+}
+function toggleValidation() {
+  APP.showValidation = !APP.showValidation;
+  document.getElementById('btn-valid').classList.toggle('active', APP.showValidation);
+  renderAll();
+}
+
+function zoomIn() {
+  const cx = canvas.width/2, cy = canvas.height/2;
+  const mm = screenToMm(cx, cy);
+  APP.scale *= 1.2;
+  APP.scale = Math.min(APP.scale, 0.2);
+  APP.offset.x = cx - mm.x * APP.scale;
+  APP.offset.y = cy - mm.y * APP.scale;
+  updateStatusBarScale();
+  renderAll();
+}
+function zoomOut() {
+  const cx = canvas.width/2, cy = canvas.height/2;
+  const mm = screenToMm(cx, cy);
+  APP.scale /= 1.2;
+  APP.scale = Math.max(APP.scale, 0.005);
+  APP.offset.x = cx - mm.x * APP.scale;
+  APP.offset.y = cy - mm.y * APP.scale;
+  updateStatusBarScale();
+  renderAll();
+}
+function fitView() {
+  const pad = 60;
+  const W = canvas.width - pad*2;
+  const H = canvas.height - pad*2;
+  APP.scale = Math.min(W / APP.warehouse.width, H / APP.warehouse.depth);
+  APP.offset.x = pad + (W - APP.warehouse.width * APP.scale) / 2;
+  APP.offset.y = pad + (H - APP.warehouse.depth * APP.scale) / 2;
+  updateStatusBarScale();
+  renderAll();
+}
+
+// ===================== STATUS BAR =====================
+function updateStatusBar() {
+  document.getElementById('sb-items').textContent = APP.items.length + APP.obstacles.length;
+  updateStatusBarScale();
+}
+function updateStatusBarScale() {
+  const ratio = Math.round(1 / APP.scale);
+  document.getElementById('sb-scale').textContent = `1:${ratio}`;
+}
+
+// ===================== MODALS =====================
+function openModal(id) { document.getElementById(id).classList.add('show'); }
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
+function openWarehouseModal() {
+  document.getElementById('wh-name').value = APP.warehouse.name;
+  document.getElementById('wh-width').value = APP.warehouse.width;
+  document.getElementById('wh-depth').value = APP.warehouse.depth;
+  document.getElementById('wh-height').value = APP.warehouse.height;
+  openModal('modal-warehouse');
+}
+function applyWarehouseSettings() {
+  pushHistory();
+  APP.warehouse.name = document.getElementById('wh-name').value;
+  APP.warehouse.width = parseInt(document.getElementById('wh-width').value);
+  APP.warehouse.depth = parseInt(document.getElementById('wh-depth').value);
+  APP.warehouse.height = parseInt(document.getElementById('wh-height').value);
+  document.getElementById('tb-wh-name').textContent = APP.warehouse.name;
+  closeModal('modal-warehouse');
+  fitView();
+}
+
+function openAutoPlace() { openModal('modal-autoplace'); }
+
+function calcAutoPlacePreview() {
+  const type = document.getElementById('ap-type').value;
+  const aisle = parseInt(document.getElementById('ap-aisle').value);
+  const wall = parseInt(document.getElementById('ap-wall').value);
+  const dir = document.getElementById('ap-dir').value;
+  const master = APP.masters[type];
+  if (!master) return;
+
+  const ww = APP.warehouse.width - wall*2;
+  const wd = APP.warehouse.depth - wall*2;
+  let rw = master.width, rd = master.depth;
+  if (dir === 'v') { rw = master.depth; rd = master.width; }
+
+  let count = 0;
+  const rowStep = rd + aisle;
+  const colStep = rw;
+  const numCols = Math.floor(ww / colStep);
+  const numRows = Math.floor(wd / rowStep);
+  count = numCols * numRows;
+
+  document.getElementById('ap-preview').textContent =
+    `配置予定: ${count}台 (${numCols}列 × ${numRows}行)`;
+}
+
+function executeAutoPlace() {
+  const type = document.getElementById('ap-type').value;
+  const aisle = parseInt(document.getElementById('ap-aisle').value);
+  const wall = parseInt(document.getElementById('ap-wall').value);
+  const dir = document.getElementById('ap-dir').value;
+  const clearExisting = document.getElementById('ap-clear').checked;
+  const master = APP.masters[type];
+  if (!master) return;
+
+  pushHistory();
+  if (clearExisting) APP.items = APP.items.filter(i => i.type !== type);
+
+  let rw = master.width, rd = master.depth;
+  const rotation = dir === 'v' ? 90 : 0;
+
+  const ww = APP.warehouse.width - wall*2;
+  const wd = APP.warehouse.depth - wall*2;
+  const colStep = rw;
+  const rowStep = rd + aisle;
+  const numCols = Math.floor(ww / colStep);
+  const numRows = Math.floor(wd / rowStep);
+
+  for (let r = 0; r < numRows; r++) {
+    for (let c = 0; c < numCols; c++) {
+      const x = wall + c * colStep;
+      const y = wall + r * rowStep;
+      APP.items.push({
+        id: APP.nextId++,
+        type,
+        x, y,
+        width: master.width,
+        depth: master.depth,
+        rotation,
+        count: 1
+      });
+    }
+  }
+
+  closeModal('modal-autoplace');
+  renderAll();
+  updateRightPanel();
+}
+
+function openItemPropsModal(item) {
+  if (!item) return;
+  const isObs = APP.obstacles.includes(item);
+  const def = isObs ? APP.obstacleDefaults[item.type] : APP.masters[item.type];
+  const el = document.getElementById('itemprops-content');
+  el.innerHTML = `
+    <div class="form-row"><label>種別</label><span style="color:#e94560">${def?.label || item.type}</span></div>
+    <div class="form-row"><label>X (mm)</label><input id="ip-x" type="number" value="${Math.round(item.x)}"></div>
+    <div class="form-row"><label>Y (mm)</label><input id="ip-y" type="number" value="${Math.round(item.y)}"></div>
+    <div class="form-row"><label>幅 (mm)</label><input id="ip-w" type="number" value="${Math.round(item.width)}"></div>
+    <div class="form-row"><label>奥行 (mm)</label><input id="ip-d" type="number" value="${Math.round(item.depth)}"></div>
+    <div class="form-row"><label>回転</label><select id="ip-rot">
+      ${[0,90,180,270].map(r=>`<option value="${r}" ${item.rotation===r?'selected':''}>${r}°</option>`).join('')}
+    </select></div>
+    ${!isObs ? `<div class="form-row"><label>数量</label><input id="ip-count" type="number" value="${item.count||1}" min="1"></div>` : ''}
+  `;
+  openModal('modal-itemprops');
+}
+
+function applyItemProps() {
+  if (!APP.selected) { closeModal('modal-itemprops'); return; }
+  pushHistory();
+  const item = APP.selected;
+  item.x = parseFloat(document.getElementById('ip-x').value) || item.x;
+  item.y = parseFloat(document.getElementById('ip-y').value) || item.y;
+  item.width = parseFloat(document.getElementById('ip-w').value) || item.width;
+  item.depth = parseFloat(document.getElementById('ip-d').value) || item.depth;
+  item.rotation = parseInt(document.getElementById('ip-rot').value);
+  const countEl = document.getElementById('ip-count');
+  if (countEl) item.count = parseInt(countEl.value) || 1;
+  closeModal('modal-itemprops');
+  renderAll();
+  updateRightPanel();
+}
+
+// ===================== SAVE / LOAD =====================
+function saveLayout() {
+  const data = {
+    version: 1,
+    warehouse: APP.warehouse,
+    items: APP.items,
+    obstacles: APP.obstacles,
+    nextId: APP.nextId,
+  };
+  localStorage.setItem('warehousePlannerData', JSON.stringify(data));
+  alert('レイアウトを保存しました');
+}
+
+function loadLayout() {
+  const raw = localStorage.getItem('warehousePlannerData');
+  if (!raw) { alert('保存データがありません'); return; }
+  try {
+    const data = JSON.parse(raw);
+    pushHistory();
+    APP.warehouse = data.warehouse || APP.warehouse;
+    APP.items = data.items || [];
+    APP.obstacles = data.obstacles || [];
+    APP.nextId = data.nextId || 1;
+    document.getElementById('tb-wh-name').textContent = APP.warehouse.name;
+    APP.selected = null;
+    fitView();
+    updateRightPanel();
+    alert('レイアウトを読み込みました');
+  } catch(e) {
+    alert('読み込みに失敗しました: ' + e.message);
+  }
+}
+
+function clearAll() {
+  if (!confirm('全てのアイテムをクリアしますか？')) return;
+  pushHistory();
+  APP.items = [];
+  APP.obstacles = [];
+  APP.selected = null;
+  renderAll();
+  updateRightPanel();
+}
+
+// ===================== EXPORT =====================
+function exportPNG() {
+  const sel = APP.selected;
+  APP.selected = null;
+  renderAll();
+  const link = document.createElement('a');
+  link.download = `${APP.warehouse.name}_layout.png`;
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+  APP.selected = sel;
+  renderAll();
+}
+
+function exportPDF() {
+  const { jsPDF } = window.jspdf;
+  if (!jsPDF) { alert('jsPDFが読み込まれていません'); return; }
+  const sel = APP.selected;
+  APP.selected = null;
+  renderAll();
+  const imgData = canvas.toDataURL('image/png');
+  const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a3' });
+  const pw = pdf.internal.pageSize.getWidth();
+  const ph = pdf.internal.pageSize.getHeight();
+  pdf.addImage(imgData, 'PNG', 10, 10, pw-20, ph-30);
+  pdf.setFontSize(10);
+  pdf.text(`${APP.warehouse.name} - 倉庫レイアウト`, 10, ph-8);
+  pdf.text(new Date().toLocaleDateString('ja-JP'), pw-40, ph-8);
+  pdf.save(`${APP.warehouse.name}_layout.pdf`);
+  APP.selected = sel;
+  renderAll();
+}
+
+function exportExcel() {
+  if (!window.XLSX) { alert('XLSXが読み込まれていません'); return; }
+  const wb = XLSX.utils.book_new();
+
+  // Summary sheet
+  const s = calcStats();
+  const summaryData = [
+    ['倉庫レイアウト サマリー'],
+    ['倉庫名', APP.warehouse.name],
+    ['寸法', `${APP.warehouse.width}mm × ${APP.warehouse.depth}mm × H${APP.warehouse.height}mm`],
+    ['倉庫面積', s.wArea.toFixed(1) + ' m²'],
+    ['使用面積', s.usedArea.toFixed(1) + ' m²'],
+    ['障害物面積', s.obsArea.toFixed(1) + ' m²'],
+    ['空間利用率', s.util.toFixed(1) + '%'],
+    [],
+    ['ラック種別', '台数'],
+  ];
+  for (const [type, cnt] of Object.entries(s.counts)) {
+    summaryData.push([APP.masters[type]?.label || type, cnt]);
+  }
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryData), 'サマリー');
+
+  // Items sheet
+  const itemsData = [['ID', '種別', 'X(mm)', 'Y(mm)', '幅(mm)', '奥行(mm)', '回転', '数量']];
+  for (const item of APP.items) {
+    itemsData.push([item.id, APP.masters[item.type]?.label || item.type, Math.round(item.x), Math.round(item.y), item.width, item.depth, item.rotation + '°', item.count || 1]);
+  }
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(itemsData), 'ラック一覧');
+
+  // Obstacles sheet
+  const obsData = [['ID', '種別', 'X(mm)', 'Y(mm)', '幅(mm)', '奥行(mm)', '回転']];
+  for (const obs of APP.obstacles) {
+    obsData.push([obs.id, APP.obstacleDefaults[obs.type]?.label || obs.type, Math.round(obs.x), Math.round(obs.y), obs.width, obs.depth, obs.rotation + '°']);
+  }
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(obsData), '障害物一覧');
+
+  XLSX.writeFile(wb, `${APP.warehouse.name}_layout.xlsx`);
+}
+
+// ===================== 3D VIEW =====================
+let renderer3d = null, scene3d = null, camera3d = null, animFrame3d = null;
+let controls3d = { isRotating: false, startX: 0, startY: 0, rotX: 0.4, rotY: -0.6, dist: 50000 };
+let wireframe3d = false;
+
+function open3DView() {
+  document.getElementById('view3d-overlay').classList.add('show');
+  setTimeout(init3DView, 50);
+}
+
+function close3DView() {
+  document.getElementById('view3d-overlay').classList.remove('show');
+  if (animFrame3d) { cancelAnimationFrame(animFrame3d); animFrame3d = null; }
+  if (renderer3d) { renderer3d.dispose(); renderer3d = null; }
+}
+
+function init3DView() {
+  const c = document.getElementById('view3d-canvas');
+  const W = c.clientWidth, H = c.clientHeight;
+  c.width = W; c.height = H;
+
+  if (!window.THREE) { alert('Three.jsが読み込まれていません'); return; }
+  const THREE = window.THREE;
+
+  scene3d = new THREE.Scene();
+  scene3d.background = new THREE.Color(0x0a0a1a);
+
+  camera3d = new THREE.PerspectiveCamera(45, W/H, 100, 500000);
+  camera3d.position.set(controls3d.dist * Math.sin(controls3d.rotY) * Math.cos(controls3d.rotX),
+                         controls3d.dist * Math.sin(controls3d.rotX),
+                         controls3d.dist * Math.cos(controls3d.rotY) * Math.cos(controls3d.rotX));
+  camera3d.lookAt(APP.warehouse.width/2, 0, APP.warehouse.depth/2);
+
+  renderer3d = new THREE.WebGLRenderer({ canvas: c, antialias: true });
+  renderer3d.setSize(W, H);
+  renderer3d.shadowMap.enabled = true;
+
+  // Lights
+  const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+  scene3d.add(ambient);
+  const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+  dirLight.position.set(APP.warehouse.width, APP.warehouse.height * 2, APP.warehouse.depth);
+  dirLight.castShadow = true;
+  scene3d.add(dirLight);
+
+  // Floor
+  const floorGeo = new THREE.PlaneGeometry(APP.warehouse.width, APP.warehouse.depth);
+  const floorMat = new THREE.MeshLambertMaterial({ color: 0x1a3a5a, side: THREE.DoubleSide });
+  const floor = new THREE.Mesh(floorGeo, floorMat);
+  floor.rotation.x = -Math.PI/2;
+  floor.position.set(APP.warehouse.width/2, 0, APP.warehouse.depth/2);
+  scene3d.add(floor);
+
+  // Warehouse walls (wireframe)
+  const wallGeo = new THREE.BoxGeometry(APP.warehouse.width, APP.warehouse.height, APP.warehouse.depth);
+  const wallMat = new THREE.MeshBasicMaterial({ color: 0xe94560, wireframe: true, transparent: true, opacity: 0.3 });
+  const walls = new THREE.Mesh(wallGeo, wallMat);
+  walls.position.set(APP.warehouse.width/2, APP.warehouse.height/2, APP.warehouse.depth/2);
+  scene3d.add(walls);
+
+  // Grid
+  const gridHelper = new THREE.GridHelper(Math.max(APP.warehouse.width, APP.warehouse.depth), 20, 0x333333, 0x333333);
+  gridHelper.position.set(APP.warehouse.width/2, 1, APP.warehouse.depth/2);
+  scene3d.add(gridHelper);
+
+  // Items
+  for (const item of APP.items) {
+    const master = APP.masters[item.type];
+    if (!master) continue;
+    const b = getItemBounds(item);
+    const h = master.height || 1000;
+    const geo = new THREE.BoxGeometry(b.w, h, b.d);
+    const color = parseInt(master.color.replace('#', ''), 16);
+    const mat = wireframe3d
+      ? new THREE.MeshBasicMaterial({ color, wireframe: true })
+      : new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 0.85 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(b.x + b.w/2, h/2, b.y + b.d/2);
+    scene3d.add(mesh);
+
+    // Edges
+    const edges = new THREE.EdgesGeometry(geo);
+    const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3 });
+    const line = new THREE.LineSegments(edges, lineMat);
+    line.position.copy(mesh.position);
+    scene3d.add(line);
+  }
+
+  // Obstacles
+  for (const obs of APP.obstacles) {
+    const def = APP.obstacleDefaults[obs.type];
+    if (!def) continue;
+    const b = getItemBounds(obs);
+    const h = 500;
+    const geo = new THREE.BoxGeometry(b.w, h, b.d);
+    const color = parseInt(def.color.replace('#', ''), 16);
+    const mat = new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 0.9 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(b.x + b.w/2, h/2, b.y + b.d/2);
+    scene3d.add(mesh);
+  }
+
+  // Mouse controls for 3D
+  c.addEventListener('mousedown', (e) => { controls3d.isRotating = true; controls3d.startX = e.clientX; controls3d.startY = e.clientY; });
+  c.addEventListener('mouseup', () => { controls3d.isRotating = false; });
+  c.addEventListener('mousemove', (e) => {
+    if (!controls3d.isRotating) return;
+    const dx = (e.clientX - controls3d.startX) * 0.005;
+    const dy = (e.clientY - controls3d.startY) * 0.005;
+    controls3d.rotY += dx;
+    controls3d.rotX = Math.max(-1.4, Math.min(1.4, controls3d.rotX + dy));
+    controls3d.startX = e.clientX;
+    controls3d.startY = e.clientY;
+    update3DCamera();
+  });
+  c.addEventListener('wheel', (e) => {
+    controls3d.dist *= e.deltaY > 0 ? 1.1 : 0.9;
+    controls3d.dist = Math.max(5000, Math.min(150000, controls3d.dist));
+    update3DCamera();
+  });
+
+  function animate3d() {
+    animFrame3d = requestAnimationFrame(animate3d);
+    renderer3d.render(scene3d, camera3d);
+  }
+  animate3d();
+}
+
+function update3DCamera() {
+  if (!camera3d) return;
+  const { rotX, rotY, dist } = controls3d;
+  camera3d.position.set(
+    APP.warehouse.width/2 + dist * Math.sin(rotY) * Math.cos(rotX),
+    dist * Math.sin(rotX),
+    APP.warehouse.depth/2 + dist * Math.cos(rotY) * Math.cos(rotX)
+  );
+  camera3d.lookAt(APP.warehouse.width/2, APP.warehouse.height/4, APP.warehouse.depth/2);
+}
+
+function reset3DCamera() {
+  controls3d = { ...controls3d, rotX: 0.4, rotY: -0.6, dist: 50000 };
+  update3DCamera();
+}
+
+function toggle3DWireframe() {
+  wireframe3d = !wireframe3d;
+  close3DView();
+  open3DView();
+}
+
+// ===================== KEYBOARD =====================
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+
+  if (e.key === 'Delete' || e.key === 'Backspace') deleteSelected();
+  if (e.key === 'r' || e.key === 'R') rotateSelected();
+  if (e.key === 'Escape') {
+    APP.selected = null;
+    setTool('select');
+    renderAll();
+    updateRightPanel();
+  }
+  if (e.key === 's') setTool('select');
+  if (e.key === 'p') setTool('pan');
+  if (e.ctrlKey && e.key === 'z') { e.preventDefault(); undoAction(); }
+  if (e.ctrlKey && (e.key === 'y' || e.key === 'Y')) { e.preventDefault(); redoAction(); }
+  if (e.ctrlKey && e.key === 'd') { e.preventDefault(); duplicateSelected(); }
+  if (e.key === '+' || e.key === '=') zoomIn();
+  if (e.key === '-') zoomOut();
+  if (e.key === 'f' || e.key === 'F') fitView();
+});
+
+// ===================== FORKLIFT INFO =====================
+function updateForkliftInfo() {
+  const aisles = { reach: 2700, counter: 3500, hand: 1800 };
+  const names = { reach: 'リーチ式', counter: 'カウンターバランス式', hand: 'ハンドリフト' };
+  document.getElementById('forklift-info').textContent =
+    `最小通路幅: ${aisles[APP.forkliftType]}mm`;
+}
+
+document.querySelector('select[onchange]').addEventListener('change', updateForkliftInfo);
+
+// ===================== RENDER LOOP =====================
+let renderRequested = false;
+function renderAll_raf() {
+  if (!renderRequested) {
+    renderRequested = true;
+    requestAnimationFrame(() => {
+      renderRequested = false;
+      renderAll();
+    });
+  }
+}
+
+// ===================== INIT =====================
+function init() {
+  buildPartsLibrary();
+  buildObstaclesLibrary();
+  resizeCanvas();
+  pushHistory(); // initial state
+  fitView();
+  updateRightPanel();
+
+  // Add some demo items
+  APP.items.push({
+    id: APP.nextId++, type: 'nesting',
+    x: 1000, y: 1000, width: 1350, depth: 1200, rotation: 0, count: 1
+  });
+  APP.items.push({
+    id: APP.nextId++, type: 'pallet',
+    x: 3000, y: 1000, width: 2700, depth: 1100, rotation: 0, count: 1
+  });
+  APP.obstacles.push({
+    id: APP.nextId++, type: 'pillar',
+    x: 14500, y: 9500, width: 500, depth: 500, rotation: 0
+  });
+  APP.obstacles.push({
+    id: APP.nextId++, type: 'dock',
+    x: 0, y: 8000, width: 3500, depth: 1000, rotation: 0
+  });
+
+  pushHistory();
+  renderAll();
+  updateRightPanel();
+}
+
+init();
+</script>
+</body>
+</html>
