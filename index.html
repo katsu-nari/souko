@@ -184,13 +184,17 @@ h3{color:#e94560;font-size:13px;margin-bottom:8px;border-bottom:1px solid #333;p
     <button onclick="redoAction()" title="やり直し (Ctrl+Y)">↪ やり直し</button>
   </div>
   <div class="tb-group">
-    <button onclick="openAutoPlace()" style="border-color:#27ae60">自動配置</button>
+    <button onclick="openAutoPlace()" style="border-color:#27ae60">⚡自動配置</button>
+    <button onclick="openAIProposal()" style="border-color:#8e44ad">🤖AI提案</button>
+    <button onclick="openProjectSheet()" style="border-color:#3498db">📋案件設計</button>
+    <button onclick="openMasterEdit()" style="border-color:#f39c12">⚙️マスタ</button>
   </div>
   <div class="tb-group">
     <span class="lbl">表示:</span>
     <button id="btn-grid" class="active" onclick="toggleGrid()">グリッド</button>
     <button id="btn-dim" class="active" onclick="toggleDimensions()">寸法</button>
     <button id="btn-heat" onclick="toggleHeatmap()">ヒートマップ</button>
+    <button id="btn-corr" class="active" onclick="toggleCorridors()">通路</button>
     <button id="btn-valid" class="active" onclick="toggleValidation()">検証</button>
   </div>
   <div class="tb-group">
@@ -221,7 +225,7 @@ h3{color:#e94560;font-size:13px;margin-bottom:8px;border-bottom:1px solid #333;p
   <!-- LEFT PANEL -->
   <div id="left-panel">
     <div class="section">
-      <h3>ラックパーツ</h3>
+      <h3>部材ライブラリ</h3>
       <div id="parts-library"></div>
     </div>
     <div class="section">
@@ -375,6 +379,56 @@ h3{color:#e94560;font-size:13px;margin-bottom:8px;border-bottom:1px solid #333;p
   </div>
 </div>
 
+<!-- AI PROPOSAL MODAL -->
+<div class="modal-overlay" id="modal-ai-proposal">
+  <div class="modal">
+    <h2>🤖 AIレイアウト提案</h2>
+    <div class="form-row"><label>取扱商品</label><input id="ai-product" placeholder="例: 飲料品、アパレル等"></div>
+    <div class="form-row"><label>ケース比率 (%)</label><input id="ai-case" type="number" value="70" min="0" max="100"></div>
+    <div class="form-row"><label>バラ比率 (%)</label><input id="ai-piece" type="number" value="30" min="0" max="100"></div>
+    <div class="form-row"><label>日次出荷件数</label><input id="ai-ship" type="number" value="100"></div>
+    <div class="form-row"><label>日次入荷件数</label><input id="ai-recv" type="number" value="50"></div>
+    <div id="ai-result" style="background:#0d1117;padding:10px;border-radius:6px;min-height:60px;margin-top:8px;font-size:11px;color:#888">条件を入力して「提案生成」を押してください</div>
+    <div class="btn-row">
+      <button class="btn-cancel" onclick="closeModal('modal-ai-proposal')">閉じる</button>
+      <button id="btn-ai-apply" style="display:none;border-color:#27ae60" onclick="applyAIProposal()">✓ レイアウトに適用</button>
+      <button onclick="runAIProposal()" style="border-color:#8e44ad">🤖 提案生成</button>
+    </div>
+  </div>
+</div>
+
+<!-- PROJECT SHEET MODAL -->
+<div class="modal-overlay" id="modal-project">
+  <div class="modal">
+    <h2>📋 案件設計シート</h2>
+    <div class="form-row"><label>荷主名</label><input id="ps-client" placeholder="株式会社〇〇"></div>
+    <div class="form-row"><label>商品カテゴリ</label><input id="ps-category" placeholder="日用品・食品等"></div>
+    <div class="form-row"><label>SKU数</label><input id="ps-sku" type="number" value="1000"></div>
+    <div class="form-row"><label>保管パレット数</label><input id="ps-pallets" type="number" value="500"></div>
+    <div class="form-row"><label>ケース比率 (%)</label><input id="ps-case" type="number" value="70"></div>
+    <div class="form-row"><label>日次出荷件数</label><input id="ps-ship" type="number" value="100"></div>
+    <div class="form-row"><label>日次入荷件数</label><input id="ps-recv" type="number" value="50"></div>
+    <div id="ps-result" style="background:#0d1117;padding:10px;border-radius:6px;min-height:80px;margin-top:8px"></div>
+    <div class="btn-row">
+      <button class="btn-cancel" onclick="closeModal('modal-project')">閉じる</button>
+      <button onclick="exportProposalPDF()" style="border-color:#27ae60">📄 提案書PDF出力</button>
+      <button onclick="calcProjectSheet()" style="border-color:#e94560">算出</button>
+    </div>
+  </div>
+</div>
+
+<!-- MASTER EDIT MODAL -->
+<div class="modal-overlay" id="modal-masters">
+  <div class="modal" style="min-width:500px">
+    <h2>⚙️ ラックマスタ編集</h2>
+    <div id="masters-content"></div>
+    <div class="btn-row">
+      <button class="btn-cancel" onclick="closeModal('modal-masters')">閉じる</button>
+      <button onclick="applyMasters()">保存</button>
+    </div>
+  </div>
+</div>
+
 <!-- ITEM PROPS MODAL -->
 <div class="modal-overlay" id="modal-itemprops">
   <div class="modal">
@@ -405,11 +459,31 @@ h3{color:#e94560;font-size:13px;margin-bottom:8px;border-bottom:1px solid #333;p
 const APP = {
   warehouse: { name: '倉庫1', width: 30000, depth: 20000, height: 6000 },
   masters: {
-    nesting: { width: 1350, depth: 1200, height: 1700, pallets: 4, label: 'ネスティングラック', color: '#2980b9' },
-    pallet:  { width: 2700, depth: 1100, height: 5000, rows: 1, levels: 4, label: 'パレットラック', color: '#8e44ad' },
-    shelf:   { width: 900,  depth: 450,  height: 1800, shelves: 5, label: '軽量棚', color: '#27ae60' },
-    flat:    { width: 5000, depth: 3000, height: 0, label: '平置きエリア', color: '#e67e22' },
-    work:    { width: 3000, depth: 3000, height: 0, label: '作業エリア', color: '#16a085' },
+    // ラックタイプ（保管能力パラメータ付き）
+    nesting: { width: 1350, depth: 1200, height: 1700,
+               innerWidth: 1200, innerDepth: 1100, stackCount: 4,
+               label: 'ネスティングラック', color: '#2980b9', group: 'rack' },
+    pallet:  { width: 2700, depth: 1100, height: 5000,
+               rows: 1, levels: 4, beamsPerBay: 2,
+               label: 'パレットラック', color: '#8e44ad', group: 'rack' },
+    shelf:   { width: 900,  depth: 450,  height: 1800,
+               shelves: 5, rows: 1,
+               label: '軽量棚', color: '#27ae60', group: 'rack' },
+    flat:    { width: 5000, depth: 3000, height: 0,
+               label: '平置きエリア', color: '#e67e22', group: 'area' },
+    work:    { width: 3000, depth: 3000, height: 0,
+               label: '作業エリア', color: '#16a085', group: 'area' },
+    // 物流ゾーンタイプ
+    receiving:  { width: 8000, depth: 6000, height: 0,
+                  label: '入荷エリア', color: '#3498db', group: 'zone' },
+    shipping:   { width: 8000, depth: 6000, height: 0,
+                  label: '出荷エリア', color: '#e74c3c', group: 'zone' },
+    inspection: { width: 4000, depth: 4000, height: 0,
+                  label: '検品エリア', color: '#9b59b6', group: 'zone' },
+    picking:    { width: 5000, depth: 4000, height: 0,
+                  label: 'ピッキングエリア', color: '#f39c12', group: 'zone' },
+    staging:    { width: 6000, depth: 4000, height: 0,
+                  label: 'ステージングエリア', color: '#1abc9c', group: 'zone' },
   },
   obstacleDefaults: {
     pillar:       { width: 500,  depth: 500,  label: '柱',    color: '#7f8c8d', clearance: 0 },
@@ -435,6 +509,7 @@ const APP = {
   showDimensions: true,
   showHeatmap: false,
   showValidation: true,
+  showCorridors: true,
   forkliftType: 'reach',
   history: [],
   historyIndex: -1,
@@ -443,6 +518,16 @@ const APP = {
   offsetAtPanStart: null,
   nextId: 1,
   ctxTarget: null,
+  // マルチセレクト
+  multiSelected: [],
+  rubberBand: null,        // {x1,y1,x2,y2} in screen px
+  clipboard: [],
+  // 案件設計
+  project: {
+    clientName: '', category: '', skuCount: 0,
+    monthlyShipments: 0, monthlyReceipts: 0,
+    storagePallets: 0, caseRatio: 70, pieceRatio: 30,
+  },
 };
 
 // ===================== CANVAS SETUP =====================
@@ -519,9 +604,11 @@ function renderAll() {
   if (APP.showHeatmap) drawHeatmap();
   drawObstacles();
   drawItems();
+  if (APP.showCorridors) drawCorridors();
   if (APP.showValidation) drawValidationOverlay();
   if (APP.showDimensions) drawDimensions();
   drawSelectionHandles();
+  drawRubberBand();
 
   updateStatusBar();
 }
@@ -825,6 +912,76 @@ function drawSelectionHandles() {
   }
 }
 
+function drawRubberBand() {
+  if (!APP.rubberBand) return;
+  const r = APP.rubberBand;
+  const x = Math.min(r.x1, r.x2), y = Math.min(r.y1, r.y2);
+  const w = Math.abs(r.x2 - r.x1), h = Math.abs(r.y2 - r.y1);
+  ctx.fillStyle = 'rgba(233,69,96,0.1)';
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = '#e94560';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 3]);
+  ctx.strokeRect(x, y, w, h);
+  ctx.setLineDash([]);
+}
+
+// マルチセレクト対応 drawSelectionHandles 上書き
+function drawMultiSelectHighlight() {
+  for (const item of APP.multiSelected) {
+    if (item === APP.selected) continue;
+    const b = getItemBounds(item);
+    const { x: sx, y: sy } = mmToScreen(b.x, b.y);
+    const sw = mmToPx(b.w), sd = mmToPx(b.d);
+    ctx.strokeStyle = '#f39c12';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 3]);
+    ctx.strokeRect(sx, sy, sw, sd);
+    ctx.setLineDash([]);
+  }
+}
+
+// ===================== コピー＆ペースト =====================
+function copySelected() {
+  const targets = APP.multiSelected.length > 0 ? APP.multiSelected : (APP.selected ? [APP.selected] : []);
+  if (targets.length === 0) return;
+  APP.clipboard = targets.map(it => JSON.parse(JSON.stringify(it)));
+  showToast(`${APP.clipboard.length}件コピーしました`);
+}
+
+function pasteItems() {
+  if (APP.clipboard.length === 0) return;
+  pushHistory();
+  const pasted = [];
+  for (const src of APP.clipboard) {
+    const copy = { ...src, id: APP.nextId++, x: src.x + 1000, y: src.y + 1000 };
+    if (APP.items.some(i => i.type === src.type) || APP.masters[src.type]) {
+      APP.items.push(copy);
+    } else {
+      APP.obstacles.push(copy);
+    }
+    pasted.push(copy);
+  }
+  APP.multiSelected = pasted;
+  APP.selected = pasted[0];
+  renderAll(); updateRightPanel();
+  showToast(`${pasted.length}件ペーストしました`);
+}
+
+function showToast(msg) {
+  let t = document.getElementById('toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'toast';
+    t.style.cssText = 'position:fixed;bottom:70px;left:50%;transform:translateX(-50%);background:#16213e;border:1px solid #e94560;color:#e0e0e0;padding:8px 18px;border-radius:20px;font-size:12px;z-index:9999;pointer-events:none;transition:opacity .3s';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.opacity = '1';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.style.opacity = '0'; }, 2000);
+}
+
 // ===================== VALIDATION =====================
 function validateLayout() {
   const issues = [];
@@ -888,7 +1045,7 @@ function updateValidationPanel() {
 
 // ===================== STATS =====================
 function calcStats() {
-  const wArea = APP.warehouse.width * APP.warehouse.depth / 1e6; // m²
+  const wArea = APP.warehouse.width * APP.warehouse.depth / 1e6;
   let usedArea = 0;
   const counts = {};
   for (const item of APP.items) {
@@ -905,18 +1062,187 @@ function calcStats() {
   return { wArea, usedArea, obsArea, util, counts };
 }
 
+// ===================== 保管能力計算 =====================
+function calcCapacity() {
+  let totalPallets = 0, totalLocations = 0;
+  const breakdown = {};
+  for (const item of APP.items) {
+    const m = APP.masters[item.type];
+    if (!m) continue;
+    let pallets = 0, locs = 0;
+    const cnt = item.count || 1;
+    if (item.type === 'nesting') {
+      const stack = item.customStackCount || m.stackCount || 4;
+      pallets = stack * cnt;
+      locs = pallets;
+    } else if (item.type === 'pallet') {
+      const rows   = item.customRows   || m.rows   || 1;
+      const levels = item.customLevels || m.levels || 4;
+      pallets = rows * levels * 2 * cnt; // 両面2パレット
+      locs = pallets;
+    } else if (item.type === 'shelf') {
+      const shelves = item.customShelves || m.shelves || 5;
+      const rows    = item.customRows    || m.rows    || 1;
+      locs = shelves * rows * 3 * cnt; // 1棚あたり3ビン
+    } else if (item.type === 'flat') {
+      const b = getItemBounds(item);
+      pallets = Math.floor(b.w * b.d / (1200 * 1000));
+      locs = pallets;
+    }
+    totalPallets    += pallets;
+    totalLocations  += locs;
+    if (!breakdown[item.type]) breakdown[item.type] = { pallets: 0, locs: 0, count: 0 };
+    breakdown[item.type].pallets += pallets;
+    breakdown[item.type].locs   += locs;
+    breakdown[item.type].count  += cnt;
+  }
+  return { totalPallets, totalLocations, breakdown };
+}
+
+// ===================== 通路幅検出 =====================
+function measureCorridors() {
+  const corridors = [];
+  const allRects = [...APP.items, ...APP.obstacles].map(it => ({ ...getItemBounds(it), ref: it }));
+  for (let i = 0; i < allRects.length; i++) {
+    const a = allRects[i];
+    for (let j = i + 1; j < allRects.length; j++) {
+      const b = allRects[j];
+      // 横方向ギャップ (a の右側に b)
+      const yOlap = Math.min(a.y+a.d, b.y+b.d) - Math.max(a.y, b.y);
+      if (yOlap > 300) {
+        if (b.x >= a.x + a.w) {
+          const gap = b.x - (a.x + a.w);
+          if (gap > 50 && gap < 10000)
+            corridors.push({ dir:'h', gap, x1:a.x+a.w, x2:b.x,
+              y: (Math.max(a.y,b.y)+Math.min(a.y+a.d,b.y+b.d))/2 });
+        } else if (a.x >= b.x + b.w) {
+          const gap = a.x - (b.x + b.w);
+          if (gap > 50 && gap < 10000)
+            corridors.push({ dir:'h', gap, x1:b.x+b.w, x2:a.x,
+              y: (Math.max(a.y,b.y)+Math.min(a.y+a.d,b.y+b.d))/2 });
+        }
+      }
+      // 縦方向ギャップ
+      const xOlap = Math.min(a.x+a.w, b.x+b.w) - Math.max(a.x, b.x);
+      if (xOlap > 300) {
+        if (b.y >= a.y + a.d) {
+          const gap = b.y - (a.y + a.d);
+          if (gap > 50 && gap < 10000)
+            corridors.push({ dir:'v', gap, y1:a.y+a.d, y2:b.y,
+              x: (Math.max(a.x,b.x)+Math.min(a.x+a.w,b.x+b.w))/2 });
+        } else if (a.y >= b.y + b.d) {
+          const gap = a.y - (b.y + b.d);
+          if (gap > 50 && gap < 10000)
+            corridors.push({ dir:'v', gap, y1:b.y+b.d, y2:a.y,
+              x: (Math.max(a.x,b.x)+Math.min(a.x+a.w,b.x+b.w))/2 });
+        }
+      }
+    }
+  }
+  return corridors;
+}
+
+function corridorColor(gap) {
+  const minAisle = APP.forkliftType === 'counter' ? 3500 : APP.forkliftType === 'hand' ? 1800 : 2700;
+  if (gap < 1200)          return { fill:'rgba(231,76,60,0.25)',  stroke:'#e74c3c', label:'通路不足' };
+  if (gap < minAisle)      return { fill:'rgba(243,156,18,0.20)', stroke:'#f39c12', label:'推奨未満' };
+  return                          { fill:'rgba(39,174,96,0.15)',  stroke:'#27ae60', label:'適正' };
+}
+
+function drawCorridors() {
+  if (!APP.showCorridors || APP.items.length + APP.obstacles.length < 2) return;
+  const corridors = measureCorridors();
+  for (const c of corridors) {
+    const col = corridorColor(c.gap);
+    if (c.dir === 'h') {
+      const sx1 = mmToScreen(c.x1, 0).x, sx2 = mmToScreen(c.x2, 0).x;
+      const sy  = mmToScreen(0, c.y).y;
+      const h   = Math.max(4, mmToPx(400));
+      ctx.fillStyle = col.fill;
+      ctx.fillRect(sx1, sy - h/2, sx2 - sx1, h);
+      ctx.strokeStyle = col.stroke;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3,3]);
+      ctx.strokeRect(sx1, sy - h/2, sx2 - sx1, h);
+      ctx.setLineDash([]);
+      // 距離ラベル
+      const mid = (sx1 + sx2) / 2;
+      ctx.fillStyle = col.stroke;
+      ctx.font = 'bold 10px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(Math.round(c.gap) + 'mm', mid, sy);
+    } else {
+      const sy1 = mmToScreen(0, c.y1).y, sy2 = mmToScreen(0, c.y2).y;
+      const sx  = mmToScreen(c.x, 0).x;
+      const w   = Math.max(4, mmToPx(400));
+      ctx.fillStyle = col.fill;
+      ctx.fillRect(sx - w/2, sy1, w, sy2 - sy1);
+      ctx.strokeStyle = col.stroke;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3,3]);
+      ctx.strokeRect(sx - w/2, sy1, w, sy2 - sy1);
+      ctx.setLineDash([]);
+      const mid = (sy1 + sy2) / 2;
+      ctx.save();
+      ctx.translate(sx, mid);
+      ctx.rotate(-Math.PI/2);
+      ctx.fillStyle = col.stroke;
+      ctx.font = 'bold 10px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(Math.round(c.gap) + 'mm', 0, 0);
+      ctx.restore();
+    }
+  }
+}
+
 function updateStatsPanel() {
   const s = calcStats();
+  const cap = calcCapacity();
   const el = document.getElementById('stats-content');
+  const pct = s.util.toFixed(1);
+  const pctColor = s.util > 70 ? '#e94560' : s.util > 40 ? '#f39c12' : '#27ae60';
   let html = `
-    <div class="stat-row"><span>倉庫面積</span><span class="stat-val">${s.wArea.toFixed(1)} m²</span></div>
-    <div class="stat-row"><span>使用面積</span><span class="stat-val">${s.usedArea.toFixed(1)} m²</span></div>
-    <div class="stat-row"><span>障害物面積</span><span class="stat-val">${s.obsArea.toFixed(1)} m²</span></div>
-    <div class="stat-row"><span>空間利用率</span><span class="stat-val">${s.util.toFixed(1)}%</span></div>
+    <div style="background:#0d1117;border-radius:6px;padding:8px;margin-bottom:6px">
+      <div style="font-size:11px;color:#888;margin-bottom:2px">総保管パレット数</div>
+      <div style="font-size:24px;font-weight:bold;color:#e94560">${cap.totalPallets.toLocaleString()} PL</div>
+      <div style="font-size:11px;color:#888">総ロケーション: ${cap.totalLocations.toLocaleString()} 箇所</div>
+    </div>
+    <div style="background:#0d1117;border-radius:6px;padding:8px;margin-bottom:6px">
+      <div style="font-size:11px;color:#888;margin-bottom:4px">面積利用率</div>
+      <div style="height:6px;background:#333;border-radius:3px;overflow:hidden">
+        <div style="height:100%;width:${Math.min(100,s.util)}%;background:${pctColor};border-radius:3px"></div>
+      </div>
+      <div style="font-size:16px;font-weight:bold;color:${pctColor};margin-top:4px">${pct}%</div>
+      <div style="font-size:10px;color:#666">${s.usedArea.toFixed(1)}m² / ${s.wArea.toFixed(1)}m²</div>
+    </div>
   `;
-  for (const [type, cnt] of Object.entries(s.counts)) {
+  // ラック別内訳
+  for (const [type, info] of Object.entries(cap.breakdown)) {
     const m = APP.masters[type];
-    if (m) html += `<div class="stat-row"><span>${m.label}</span><span class="stat-val">${cnt}台</span></div>`;
+    if (!m) continue;
+    html += `<div class="stat-row">
+      <span><span style="display:inline-block;width:8px;height:8px;background:${m.color};border-radius:2px;margin-right:4px"></span>${m.label}</span>
+      <span class="stat-val">${info.count}台</span>
+    </div>`;
+    if (info.pallets > 0)
+      html += `<div class="stat-row" style="padding-left:12px"><span style="color:#666">└ パレット</span><span class="stat-val">${info.pallets} PL</span></div>`;
+    if (info.locs > 0 && m.group === 'rack' && type !== 'nesting' && type !== 'flat')
+      html += `<div class="stat-row" style="padding-left:12px"><span style="color:#666">└ ロケーション</span><span class="stat-val">${info.locs}</span></div>`;
+  }
+  // 通路状況サマリ
+  if (APP.showCorridors) {
+    const corridors = measureCorridors();
+    const minAisle = APP.forkliftType === 'counter' ? 3500 : APP.forkliftType === 'hand' ? 1800 : 2700;
+    const ng = corridors.filter(c => c.gap < minAisle).length;
+    const warn = corridors.filter(c => c.gap >= minAisle && c.gap < 3500).length;
+    html += `<div style="margin-top:6px;padding:6px;background:#0d1117;border-radius:4px;font-size:11px">
+      <div style="color:#888;margin-bottom:3px">通路チェック (${corridors.length}箇所)</div>
+      <span style="color:#e74c3c">●不足 ${ng}</span>&nbsp;&nbsp;
+      <span style="color:#f39c12">●注意 ${warn}</span>&nbsp;&nbsp;
+      <span style="color:#27ae60">●適正 ${corridors.length-ng-warn}</span>
+    </div>`;
   }
   el.innerHTML = html;
 }
@@ -1050,13 +1376,30 @@ function onMouseDown(e) {
     if (APP.tool === 'select') {
       const hit = hitTestItems(mm.x, mm.y);
       if (hit) {
-        pushHistory();
-        APP.selected = hit;
-        APP.dragging = hit;
-        APP.dragStartMm = mm;
-        APP.dragItemOrigin = { x: hit.x, y: hit.y };
+        // Ctrl+click → マルチセレクト追加/除去
+        if (e.ctrlKey || e.metaKey) {
+          const idx = APP.multiSelected.indexOf(hit);
+          if (idx >= 0) APP.multiSelected.splice(idx, 1);
+          else APP.multiSelected.push(hit);
+          APP.selected = hit;
+        } else {
+          if (!APP.multiSelected.includes(hit)) APP.multiSelected = [];
+          pushHistory();
+          APP.selected = hit;
+          APP.dragging = hit;
+          APP.dragStartMm = mm;
+          APP.dragItemOrigin = { x: hit.x, y: hit.y };
+          // マルチセレクト内のアイテムの元座標も記録
+          APP.multiDragOrigins = APP.multiSelected.map(it => ({ id: it.id, x: it.x, y: it.y }));
+        }
       } else {
-        APP.selected = null;
+        if (!e.ctrlKey && !e.metaKey) {
+          APP.selected = null;
+          APP.multiSelected = [];
+        }
+        // ラバーバンド開始
+        APP.rubberBand = { x1: pos.x, y1: pos.y, x2: pos.x, y2: pos.y };
+        APP.rubberBandStartMm = mm;
       }
       renderAll();
       updateRightPanel();
@@ -1070,7 +1413,6 @@ function onMouseMove(e) {
   lastMouseMm = mm;
   shiftDown = e.shiftKey;
 
-  // Update cursor display
   document.getElementById('sb-cursor').textContent =
     `X: ${Math.round(mm.x)}mm, Y: ${Math.round(mm.y)}mm`;
 
@@ -1086,20 +1428,44 @@ function onMouseMove(e) {
   if (APP.dragging) {
     const dx = mm.x - APP.dragStartMm.x;
     const dy = mm.y - APP.dragStartMm.y;
-    let nx = APP.dragItemOrigin.x + dx;
-    let ny = APP.dragItemOrigin.y + dy;
-    nx = snapMm(nx, e.shiftKey);
-    ny = snapMm(ny, e.shiftKey);
+    let nx = snapMm(APP.dragItemOrigin.x + dx, e.shiftKey);
+    let ny = snapMm(APP.dragItemOrigin.y + dy, e.shiftKey);
     nx = Math.max(0, Math.min(nx, APP.warehouse.width - APP.dragging.width));
     ny = Math.max(0, Math.min(ny, APP.warehouse.depth - APP.dragging.depth));
     APP.dragging.x = nx;
     APP.dragging.y = ny;
+    // マルチドラッグ
+    if (APP.multiSelected.length > 1 && APP.multiDragOrigins) {
+      for (const orig of APP.multiDragOrigins) {
+        const it = APP.items.find(i => i.id === orig.id) || APP.obstacles.find(o => o.id === orig.id);
+        if (it && it !== APP.dragging) {
+          it.x = snapMm(orig.x + dx, e.shiftKey);
+          it.y = snapMm(orig.y + dy, e.shiftKey);
+        }
+      }
+    }
     renderAll();
     updateRightPanel();
     return;
   }
 
-  // Ghost for placing
+  // ラバーバンド更新
+  if (APP.rubberBand) {
+    APP.rubberBand.x2 = pos.x;
+    APP.rubberBand.y2 = pos.y;
+    // ラバーバンド内のアイテムをハイライト
+    const rx1 = Math.min(APP.rubberBandStartMm.x, mm.x);
+    const rx2 = Math.max(APP.rubberBandStartMm.x, mm.x);
+    const ry1 = Math.min(APP.rubberBandStartMm.y, mm.y);
+    const ry2 = Math.max(APP.rubberBandStartMm.y, mm.y);
+    APP.multiSelected = [...APP.items, ...APP.obstacles].filter(it => {
+      const b = getItemBounds(it);
+      return b.x >= rx1 && b.x + b.w <= rx2 && b.y >= ry1 && b.y + b.d <= ry2;
+    });
+    renderAll();
+    return;
+  }
+
   if (APP.tool === 'place' && APP.placingType) {
     renderAll();
     drawPlacingGhost(mm, e.shiftKey);
@@ -1113,6 +1479,11 @@ function onMouseUp(e) {
   }
   if (APP.dragging) {
     APP.dragging = null;
+    APP.multiDragOrigins = null;
+  }
+  if (APP.rubberBand) {
+    APP.rubberBand = null;
+    renderAll();
   }
 }
 
@@ -1449,29 +1820,47 @@ function drawPlacingGhost(mm, shift) {
 function buildPartsLibrary() {
   const container = document.getElementById('parts-library');
   container.innerHTML = '';
-  for (const [type, master] of Object.entries(APP.masters)) {
-    const div = document.createElement('div');
-    div.className = 'part-item';
-    div.innerHTML = `
-      <div class="color-dot" style="background:${master.color}"></div>
-      <div class="part-info">
-        <div class="part-name">${master.label}</div>
-        <div class="part-dim">${master.width}×${master.depth}mm H:${master.height}mm</div>
-      </div>
-    `;
-    div.addEventListener('click', () => {
-      setTool('place');
-      APP.placingType = type;
-      APP.placingIsObstacle = false;
-      highlightPartItem(div);
-    });
-    div.addEventListener('dragstart', (e) => {
-      e.dataTransfer.setData('type', type);
-      e.dataTransfer.setData('isObs', 'false');
-    });
-    div.draggable = true;
-    container.appendChild(div);
+  const groups = { rack:'ラック', area:'エリア', zone:'物流ゾーン' };
+  for (const [grp, grpLabel] of Object.entries(groups)) {
+    const entries = Object.entries(APP.masters).filter(([,m]) => m.group === grp);
+    if (!entries.length) continue;
+    const hdr = document.createElement('div');
+    hdr.style.cssText = 'font-size:10px;color:#888;margin:6px 0 3px;text-transform:uppercase;letter-spacing:1px';
+    hdr.textContent = grpLabel;
+    container.appendChild(hdr);
+    for (const [type, master] of entries) {
+      const div = document.createElement('div');
+      div.className = 'part-item';
+      const cap = master.group==='rack' ? calcMasterCapacity(type) : '';
+      div.innerHTML = `
+        <div class="color-dot" style="background:${master.color}"></div>
+        <div class="part-info">
+          <div class="part-name">${master.label}</div>
+          <div class="part-dim">${master.width}×${master.depth}mm${cap}</div>
+        </div>
+      `;
+      div.addEventListener('click', () => {
+        setTool('place');
+        APP.placingType = type;
+        APP.placingIsObstacle = false;
+        highlightPartItem(div);
+      });
+      div.addEventListener('dragstart', (e) => {
+        e.dataTransfer.setData('type', type);
+        e.dataTransfer.setData('isObs', 'false');
+      });
+      div.draggable = true;
+      container.appendChild(div);
+    }
   }
+}
+
+function calcMasterCapacity(type) {
+  const m = APP.masters[type];
+  if (type === 'nesting') return ` / ${m.stackCount||4}PL/台`;
+  if (type === 'pallet')  return ` / ${(m.rows||1)*(m.levels||4)*2}PL/台`;
+  if (type === 'shelf')   return ` / ${(m.rows||1)*(m.shelves||5)*3}LOC/台`;
+  return '';
 }
 
 function buildObstaclesLibrary() {
@@ -1592,6 +1981,127 @@ function toggleValidation() {
   renderAll();
 }
 
+function toggleCorridors() {
+  APP.showCorridors = !APP.showCorridors;
+  document.getElementById('btn-corr').classList.toggle('active', APP.showCorridors);
+  renderAll(); updateRightPanel();
+}
+
+// ===================== マスタ編集 =====================
+function openMasterEdit() {
+  const el = document.getElementById('masters-content');
+  let html = '';
+  const editableTypes = ['nesting','pallet','shelf'];
+  for (const t of editableTypes) {
+    const m = APP.masters[t];
+    html += `<div style="background:#0d1117;padding:8px;border-radius:4px;margin-bottom:8px">
+      <div style="color:${m.color};font-weight:bold;margin-bottom:6px">${m.label}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:11px">
+        <div><label>幅(mm)</label><input type="number" id="m-${t}-w" value="${m.width}" style="width:100%"></div>
+        <div><label>奥行(mm)</label><input type="number" id="m-${t}-d" value="${m.depth}" style="width:100%"></div>
+        <div><label>高さ(mm)</label><input type="number" id="m-${t}-h" value="${m.height}" style="width:100%"></div>
+    `;
+    if (t === 'nesting')
+      html += `<div><label>段積み数</label><input type="number" id="m-${t}-stack" value="${m.stackCount||4}" style="width:100%"></div>`;
+    if (t === 'pallet')
+      html += `<div><label>段数</label><input type="number" id="m-${t}-levels" value="${m.levels||4}" style="width:100%"></div>
+               <div><label>連数</label><input type="number" id="m-${t}-rows" value="${m.rows||1}" style="width:100%"></div>`;
+    if (t === 'shelf')
+      html += `<div><label>棚板数</label><input type="number" id="m-${t}-shelves" value="${m.shelves||5}" style="width:100%"></div>
+               <div><label>連数</label><input type="number" id="m-${t}-rows" value="${m.rows||1}" style="width:100%"></div>`;
+    html += `</div></div>`;
+  }
+  el.innerHTML = html;
+  openModal('modal-masters');
+}
+
+function applyMasters() {
+  for (const t of ['nesting','pallet','shelf']) {
+    const m = APP.masters[t];
+    m.width  = parseInt(document.getElementById(`m-${t}-w`)?.value) || m.width;
+    m.depth  = parseInt(document.getElementById(`m-${t}-d`)?.value) || m.depth;
+    m.height = parseInt(document.getElementById(`m-${t}-h`)?.value) || m.height;
+    if (t === 'nesting') m.stackCount = parseInt(document.getElementById(`m-${t}-stack`)?.value) || 4;
+    if (t === 'pallet')  { m.levels = parseInt(document.getElementById(`m-${t}-levels`)?.value) || 4;
+                           m.rows   = parseInt(document.getElementById(`m-${t}-rows`)?.value)   || 1; }
+    if (t === 'shelf')   { m.shelves = parseInt(document.getElementById(`m-${t}-shelves`)?.value) || 5;
+                           m.rows    = parseInt(document.getElementById(`m-${t}-rows`)?.value)    || 1; }
+  }
+  buildPartsLibrary();
+  closeModal('modal-masters');
+  renderAll(); updateRightPanel();
+  showToast('マスタを更新しました');
+}
+
+// ===================== 提案書PDF =====================
+function exportProposalPDF() {
+  const { jsPDF } = window.jspdf;
+  if (!jsPDF) { alert('jsPDFが読み込まれていません'); return; }
+
+  const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pw = pdf.internal.pageSize.getWidth();
+
+  // 表紙
+  pdf.setFillColor(22, 33, 62);
+  pdf.rect(0, 0, pw, 297, 'F');
+  pdf.setTextColor(233, 69, 96);
+  pdf.setFontSize(22);
+  pdf.text('物流センター設計提案書', pw/2, 80, { align:'center' });
+  pdf.setTextColor(224, 224, 224);
+  pdf.setFontSize(14);
+  const client = document.getElementById('ps-client')?.value || APP.warehouse.name;
+  pdf.text(client + ' 様', pw/2, 100, { align:'center' });
+  pdf.setFontSize(10);
+  pdf.text(new Date().toLocaleDateString('ja-JP'), pw/2, 120, { align:'center' });
+
+  // P2: センター概要
+  pdf.addPage();
+  pdf.setTextColor(30, 30, 30);
+  pdf.setFontSize(16); pdf.text('センター概要', 20, 25);
+  pdf.setFontSize(10);
+  const cap = calcCapacity();
+  const s   = calcStats();
+  const rows = [
+    ['倉庫名',     APP.warehouse.name],
+    ['倉庫寸法',   `${APP.warehouse.width/1000}m × ${APP.warehouse.depth/1000}m × H${APP.warehouse.height/1000}m`],
+    ['倉庫面積',   `${s.wArea.toFixed(0)} ㎡（${(s.wArea/3.306).toFixed(0)}坪）`],
+    ['総保管PL数', `${cap.totalPallets} パレット`],
+    ['総ロケーション', `${cap.totalLocations} 箇所`],
+    ['面積利用率', `${s.util.toFixed(1)} %`],
+  ];
+  rows.forEach(([k,v], i) => {
+    pdf.setFillColor(240, 240, 240);
+    pdf.rect(20, 35 + i*10, 60, 9, 'F');
+    pdf.text(k, 22, 42 + i*10);
+    pdf.text(v, 85, 42 + i*10);
+  });
+
+  // P3: レイアウト図
+  pdf.addPage();
+  pdf.setFontSize(16); pdf.text('レイアウト図', 20, 25);
+  const sel = APP.selected; APP.selected = null; renderAll();
+  const img = canvas.toDataURL('image/png');
+  pdf.addImage(img, 'PNG', 15, 32, pw-30, (pw-30)*0.6);
+  APP.selected = sel; renderAll();
+
+  // P4: 能力サマリ
+  pdf.addPage();
+  pdf.setFontSize(16); pdf.text('保管能力サマリー', 20, 25);
+  pdf.setFontSize(10);
+  let y = 38;
+  for (const [type, info] of Object.entries(cap.breakdown)) {
+    const m = APP.masters[type];
+    if (!m) continue;
+    pdf.text(`${m.label}: ${info.count}台`, 25, y);
+    if (info.pallets > 0) pdf.text(`→ ${info.pallets} PL`, 90, y);
+    if (info.locs   > 0 && type === 'shelf') pdf.text(`→ ${info.locs} ロケーション`, 120, y);
+    y += 10;
+  }
+
+  pdf.save(`${APP.warehouse.name}_提案書.pdf`);
+  showToast('提案書PDFを出力しました');
+}
+
 function zoomIn() {
   const cx = canvas.width/2, cy = canvas.height/2;
   const mm = screenToMm(cx, cy);
@@ -1681,11 +2191,24 @@ function calcAutoPlacePreview() {
     `配置予定: ${count}台 (${numCols}列 × ${numRows}行)`;
 }
 
+// 障害物との衝突チェック
+function collidesWithObstacles(x, y, w, d, margin) {
+  for (const obs of APP.obstacles) {
+    const def = APP.obstacleDefaults[obs.type];
+    const cl = Math.max(margin, (def?.clearance || 0));
+    const ob = getItemBounds(obs);
+    const ox = Math.max(0, Math.min(x+w, ob.x+ob.w+cl) - Math.max(x, ob.x-cl));
+    const oy = Math.max(0, Math.min(y+d, ob.y+ob.d+cl) - Math.max(y, ob.y-cl));
+    if (ox > 0 && oy > 0) return true;
+  }
+  return false;
+}
+
 function executeAutoPlace() {
   const type = document.getElementById('ap-type').value;
   const aisle = parseInt(document.getElementById('ap-aisle').value);
-  const wall = parseInt(document.getElementById('ap-wall').value);
-  const dir = document.getElementById('ap-dir').value;
+  const wall  = parseInt(document.getElementById('ap-wall').value);
+  const dir   = document.getElementById('ap-dir').value;
   const clearExisting = document.getElementById('ap-clear').checked;
   const master = APP.masters[type];
   if (!master) return;
@@ -1694,34 +2217,153 @@ function executeAutoPlace() {
   if (clearExisting) APP.items = APP.items.filter(i => i.type !== type);
 
   let rw = master.width, rd = master.depth;
+  if (dir === 'v') { [rw, rd] = [rd, rw]; }
   const rotation = dir === 'v' ? 90 : 0;
-
-  const ww = APP.warehouse.width - wall*2;
-  const wd = APP.warehouse.depth - wall*2;
-  const colStep = rw;
   const rowStep = rd + aisle;
-  const numCols = Math.floor(ww / colStep);
-  const numRows = Math.floor(wd / rowStep);
+  const colStep = rw;
+  let placed = 0;
 
-  for (let r = 0; r < numRows; r++) {
-    for (let c = 0; c < numCols; c++) {
-      const x = wall + c * colStep;
-      const y = wall + r * rowStep;
-      APP.items.push({
-        id: APP.nextId++,
-        type,
-        x, y,
-        width: master.width,
-        depth: master.depth,
-        rotation,
-        count: 1
-      });
+  for (let y = wall; y + rd <= APP.warehouse.depth - wall; y += rowStep) {
+    for (let x = wall; x + rw <= APP.warehouse.width - wall; x += colStep) {
+      if (!collidesWithObstacles(x, y, rw, rd, 300)) {
+        APP.items.push({ id: APP.nextId++, type, x, y,
+          width: master.width, depth: master.depth, rotation, count: 1 });
+        placed++;
+      }
     }
   }
 
+  const cap = calcCapacity();
+  document.getElementById('ap-preview').innerHTML =
+    `<span style="color:#27ae60">✓ 配置完了: ${placed}台 / ${cap.totalPallets} PL</span>`;
   closeModal('modal-autoplace');
-  renderAll();
-  updateRightPanel();
+  renderAll(); updateRightPanel();
+}
+
+// ===================== AIレイアウト提案 =====================
+function openAIProposal() { openModal('modal-ai-proposal'); }
+
+function runAIProposal() {
+  const caseRatio  = parseInt(document.getElementById('ai-case').value)  || 70;
+  const pieceRatio = parseInt(document.getElementById('ai-piece').value) || 30;
+  const ships      = parseInt(document.getElementById('ai-ship').value)  || 100;
+  const recvs      = parseInt(document.getElementById('ai-recv').value)  || 50;
+  const product    = document.getElementById('ai-product').value || '一般商品';
+
+  // ルールベースAI
+  const reasons = [];
+  const zones   = [];
+  const ww = APP.warehouse.width, wd = APP.warehouse.depth;
+
+  // ドック位置判定
+  const docks = APP.obstacles.filter(o => o.type === 'dock');
+  const dockSide = docks.length > 0 && docks[0].y < wd * 0.3 ? 'top' : 'bottom';
+
+  // 出荷エリア（ドック近く、大きい）
+  const shipW = Math.min(ww * 0.35, 10000), shipD = Math.min(wd * 0.25, 8000);
+  const shipX = 500, shipY = dockSide === 'top' ? 2000 : wd - shipD - 500;
+  zones.push({ type:'shipping', x:shipX, y:shipY, w:shipW, d:shipD });
+  reasons.push(`出荷エリアをドック側(${dockSide==='top'?'上':'下'}部)に配置。日次${ships}件の出荷に対応`);
+
+  // 入荷エリア
+  const recvW = Math.min(ww * 0.25, 8000), recvD = Math.min(wd * 0.2, 6000);
+  const recvX = shipX + shipW + 1000, recvY = shipY;
+  zones.push({ type:'receiving', x:recvX, y:recvY, w:recvW, d:recvD });
+  reasons.push(`入荷エリアを出荷エリア隣接配置。日次${recvs}件の入荷フロー効率化`);
+
+  // 検品エリア
+  const inspW = 4000, inspD = 3000;
+  zones.push({ type:'inspection', x:recvX + recvW + 500, y:recvY, w:inspW, d:inspD });
+  reasons.push('検品エリアを入荷動線上に配置');
+
+  // ピッキングエリア（バラ比率が高い場合拡大）
+  if (pieceRatio > 30) {
+    const pickW = Math.min(ww * 0.2, 6000), pickD = Math.min(wd * 0.3, 8000);
+    zones.push({ type:'picking', x:ww - pickW - 500,
+                 y: dockSide === 'top' ? 2000 : wd - pickD - 500, w:pickW, d:pickD });
+    reasons.push(`バラ比率${pieceRatio}%のためピッキングエリアを拡大。出荷口近くに配置`);
+  }
+
+  // ステージングエリア
+  zones.push({ type:'staging', x:500, y: dockSide==='top' ? wd*0.4 : wd*0.1, w:5000, d:4000 });
+  reasons.push('出荷ステージングを作業動線中央に配置');
+
+  // 保管エリアはゾーン配置後の残スペースにネスティング自動配置
+  if (caseRatio > 50) reasons.push(`ケース比率${caseRatio}%のため主保管をネスティングラックで構成`);
+  else reasons.push(`パレット比率が高いためパレットラック中心の構成を推奨`);
+
+  // 結果表示
+  let html = '<div style="font-size:12px;color:#27ae60;font-weight:bold;margin-bottom:8px">提案内容</div>';
+  for (let i = 0; i < reasons.length; i++) {
+    html += `<div style="padding:4px 0;border-bottom:1px solid #333;font-size:11px">
+      <span style="color:#e94560">▸</span> ${reasons[i]}</div>`;
+  }
+  html += `<div style="margin-top:8px;padding:6px;background:#0d1117;border-radius:4px;font-size:11px;color:#aaa">
+    ゾーン構成: ${zones.length}エリア提案<br>
+    残保管スペース: 約${Math.round((ww*wd - zones.reduce((s,z)=>s+z.w*z.d,0))/1e6)}㎡
+  </div>`;
+  document.getElementById('ai-result').innerHTML = html;
+
+  // 提案データを一時保存
+  document.getElementById('ai-result').dataset.zones = JSON.stringify(zones);
+  document.getElementById('btn-ai-apply').style.display = 'inline-block';
+}
+
+function applyAIProposal() {
+  const el = document.getElementById('ai-result');
+  const zones = JSON.parse(el.dataset.zones || '[]');
+  if (zones.length === 0) return;
+  pushHistory();
+  for (const z of zones) {
+    const m = APP.masters[z.type];
+    if (!m) continue;
+    APP.items.push({ id: APP.nextId++, type: z.type,
+      x: z.x, y: z.y, width: z.w, depth: z.d, rotation: 0, count: 1 });
+  }
+  closeModal('modal-ai-proposal');
+  renderAll(); updateRightPanel();
+  showToast('AIレイアウトを適用しました');
+}
+
+// ===================== 案件設計シート =====================
+function openProjectSheet() { openModal('modal-project'); }
+
+function calcProjectSheet() {
+  const pallets  = parseInt(document.getElementById('ps-pallets').value) || 500;
+  const caseRatio= parseInt(document.getElementById('ps-case').value)    || 70;
+  const ships    = parseInt(document.getElementById('ps-ship').value)    || 100;
+  const skus     = parseInt(document.getElementById('ps-sku').value)     || 1000;
+
+  // 面積算出
+  const nestingCount  = Math.ceil(pallets * (caseRatio / 100) / 4);
+  const palletCount   = Math.ceil(pallets * ((100 - caseRatio) / 100) / 8);
+  const shelfCount    = Math.ceil(skus * 0.3 / 15);
+  const nestingArea   = nestingCount  * 1.35 * 1.2 / 0.6; // 通路含む
+  const palletArea    = palletCount   * 2.7  * 1.1 / 0.5;
+  const shelfArea     = shelfCount    * 0.9  * 0.45 / 0.55;
+  const pickArea      = Math.max(30, ships * 0.05);
+  const dockArea      = Math.ceil(ships / 50) * 20;
+  const totalArea     = nestingArea + palletArea + shelfArea + pickArea + dockArea + 50;
+
+  // 人員算出（簡易）
+  const pickStaff  = Math.ceil(ships / 80);
+  const recvStaff  = Math.ceil(parseInt(document.getElementById('ps-recv').value || 50) / 100);
+  const totalStaff = pickStaff + recvStaff + 1; // +1管理
+
+  const el = document.getElementById('ps-result');
+  el.innerHTML = `
+    <div style="font-size:12px;color:#e94560;font-weight:bold;margin-bottom:8px">算出結果</div>
+    <table style="width:100%;border-collapse:collapse;font-size:11px">
+      <tr style="border-bottom:1px solid #333"><td style="padding:4px;color:#888">ネスティングラック</td><td style="color:#e0e0e0;text-align:right">${nestingCount}台 (${pallets*caseRatio/100|0}PL)</td></tr>
+      <tr style="border-bottom:1px solid #333"><td style="padding:4px;color:#888">パレットラック</td><td style="color:#e0e0e0;text-align:right">${palletCount}台 (${pallets*(100-caseRatio)/100|0}PL)</td></tr>
+      <tr style="border-bottom:1px solid #333"><td style="padding:4px;color:#888">軽量棚</td><td style="color:#e0e0e0;text-align:right">${shelfCount}台</td></tr>
+      <tr style="border-bottom:1px solid #333"><td style="padding:4px;color:#888">必要保管面積</td><td style="color:#e94560;font-weight:bold;text-align:right">${totalArea.toFixed(0)}㎡</td></tr>
+      <tr style="border-bottom:1px solid #333"><td style="padding:4px;color:#888">坪換算</td><td style="color:#e94560;font-weight:bold;text-align:right">${(totalArea/3.306).toFixed(0)}坪</td></tr>
+      <tr style="border-bottom:1px solid #333"><td style="padding:4px;color:#888">必要人員（ピーク）</td><td style="color:#f39c12;font-weight:bold;text-align:right">${totalStaff}名</td></tr>
+      <tr><td style="padding:4px;color:#888">推奨倉庫規模</td><td style="color:#27ae60;font-weight:bold;text-align:right">${(totalArea*1.3).toFixed(0)}㎡以上</td></tr>
+    </table>
+    <div style="margin-top:8px;font-size:10px;color:#666">※余裕率1.3倍を加算。実際の設計では詳細ヒアリングが必要です。</div>
+  `;
 }
 
 function openItemPropsModal(item) {
@@ -2040,10 +2682,19 @@ document.addEventListener('keydown', (e) => {
   if (e.ctrlKey && e.key === 'z') { e.preventDefault(); undoAction(); }
   if (e.ctrlKey && (e.key === 'y' || e.key === 'Y')) { e.preventDefault(); redoAction(); }
   if (e.ctrlKey && e.key === 'd') { e.preventDefault(); duplicateSelected(); }
+  if (e.ctrlKey && e.key === 'c') { e.preventDefault(); copySelected(); }
+  if (e.ctrlKey && e.key === 'v') { e.preventDefault(); pasteItems(); }
+  if (e.ctrlKey && e.key === 'a') { e.preventDefault(); selectAll(); }
   if (e.key === '+' || e.key === '=') zoomIn();
   if (e.key === '-') zoomOut();
   if (e.key === 'f' || e.key === 'F') fitView();
 });
+
+function selectAll() {
+  APP.multiSelected = [...APP.items, ...APP.obstacles];
+  APP.selected = APP.multiSelected[0] || null;
+  renderAll(); updateRightPanel();
+}
 
 // ===================== FORKLIFT INFO =====================
 function updateForkliftInfo() {
